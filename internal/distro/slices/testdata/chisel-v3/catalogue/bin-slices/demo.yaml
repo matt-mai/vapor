@@ -1,0 +1,11 @@
+# Synthetic store-backed SDF; the locked download is supplied by future mock tests.
+# SPDX-License-Identifier: CC0-1.0
+package: demo
+store: bin
+default-track: "1"
+essential:
+  base-files_release-info:
+slices:
+  bins:
+    contents:
+      /usr/bin/demo:

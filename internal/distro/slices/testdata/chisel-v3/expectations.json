@@ -1,0 +1,17 @@
+{
+  "fixtureKind": "synthetic; not complete Canonical release data",
+  "rootFormat": "v3",
+  "starterSelection": "base-files_release-info",
+  "starterClosureByArch": {
+    "amd64": ["base-files_copyright", "base-files_etc", "base-files_lib", "base-files_release-info"],
+    "arm64": ["base-files_copyright", "base-files_etc", "base-files_lib", "base-files_release-info"]
+  },
+  "storeSelection": "bin-demo_bins",
+  "storeTrack": "1",
+  "storeAcquisition": "unsupported at pinned upstream implementation",
+  "invalidCases": [
+    {"path": "invalid/list-essential.yaml", "filename": "invalid.yaml", "errorContains": "essential expects a map"},
+    {"path": "invalid/mixed-path.yaml", "filename": "invalid.yaml", "errorContains": "conflict in slice invalid_runtime definition for path /etc/fixture"}
+  ],
+  "semanticTestsImplemented": false
+}

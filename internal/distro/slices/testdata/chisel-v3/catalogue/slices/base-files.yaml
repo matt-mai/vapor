@@ -1,0 +1,22 @@
+# Synthetic starter subset, NOT the complete upstream base-files definition.
+# SPDX-License-Identifier: CC0-1.0
+package: base-files
+essential:
+  base-files_copyright:
+slices:
+  etc:
+    contents:
+      /etc/:
+  lib:
+    contents:
+      /usr/lib/:
+  release-info:
+    essential:
+      base-files_etc:
+      base-files_lib:
+    contents:
+      /etc/os-release:
+      /usr/lib/os-release:
+  copyright:
+    contents:
+      /usr/share/doc/base-files/copyright:

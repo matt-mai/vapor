@@ -1,0 +1,30 @@
+# Original feature probe. No package archive or filesystem payload is provided.
+# SPDX-License-Identifier: CC0-1.0
+package: fixture
+archive: pinned-only
+essential:
+  base-files_release-info:
+slices:
+  support:
+    contents:
+      /usr/share/fixture/help:
+  runtime:
+    essential:
+      fixture_support: {arch: [amd64, arm64]}
+    contents:
+      /usr/share/fixture/input: {until: mutate}
+      /usr/share/fixture/output: {text: "before\n", mutable: true, mode: 0644}
+      /usr/share/fixture/copied: {copy: /usr/share/fixture/source}
+      /usr/share/fixture/link: {symlink: output}
+      /usr/share/fixture/empty/: {make: true, mode: 0750}
+      /usr/lib/fixture/*.so*: {arch: amd64}
+      /usr/share/fixture/preferred: {prefer: provider}
+    mutate: |
+      content.write("/usr/share/fixture/output", content.read("/usr/share/fixture/input"))
+  manifest:
+    contents:
+      /var/lib/chisel/**: {generate: manifest}
+  optional:
+    hint: optional
+    contents:
+      /usr/share/fixture/optional: {text: "optional\n"}

@@ -1,0 +1,7 @@
+# Expected rejection: text and symlink are mutually exclusive path kinds.
+# SPDX-License-Identifier: CC0-1.0
+package: invalid
+slices:
+  runtime:
+    contents:
+      /etc/fixture: {text: "fixture\n", symlink: /etc/other}

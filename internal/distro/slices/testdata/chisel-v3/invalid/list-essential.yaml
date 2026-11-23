@@ -1,0 +1,6 @@
+# Expected rejection in a v3 catalogue: essential must be a map.
+# SPDX-License-Identifier: CC0-1.0
+package: invalid
+slices:
+  runtime:
+    essential: [base-files_release-info]

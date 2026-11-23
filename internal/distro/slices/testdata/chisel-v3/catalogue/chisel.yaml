@@ -1,0 +1,56 @@
+# Synthetic offline fixture, not Canonical's release or a production trust policy.
+# SPDX-License-Identifier: CC0-1.0
+format: v3
+maintenance:
+  standard: 2026-04-23
+  expanded: 2031-05-29
+  legacy: 2036-04-23
+  end-of-life: 2038-04-27
+archives:
+  ubuntu:
+    version: "26.04"
+    suites: [resolute, resolute-security, resolute-updates]
+    components: [main, universe]
+    priority: 10
+    public-keys: [fixture-only]
+  ubuntu-esm-apps:
+    version: "26.04"
+    suites: [resolute-apps-security, resolute-apps-updates]
+    components: [main]
+    priority: 16
+    pro: esm-apps
+    public-keys: [fixture-only]
+  pinned-only:
+    version: "26.04"
+    suites: [resolute]
+    components: [main]
+    priority: -1
+    public-keys: [fixture-only]
+stores:
+  bin:
+    kind: bin
+    version: "26.04"
+    default-prefix: bin-
+public-keys:
+  fixture-only:
+    id: "F6DC226F4AAF8F29"
+    armor: |
+      -----BEGIN PGP PUBLIC KEY BLOCK-----
+
+      mQENBGlVuQABCADCxPs8ARnp+c1pTRjzUa4KgJCSS/FTn1EZW7bXQfWyWzwX9z5G
+      0JOSNBx6d7XB5h56kl4tU1FMCQwAfnuGNuA+VGwOFTJSod9it7lAg687rEYRl9v3
+      gT5aEDlseeYWG+PZTkJAsuEDYFotqFXIKT28xNUloTTVaVJx5gD2uciUMlGUn7Pt
+      K7WfOJsczCxUHWwyJFaKoFSpruELqJ3Tl0c6QGk2rM4QVg6b4d2CM7x/Nybos4QG
+      3WUGfMaUO6lF5IKr6qtLNfRy0YxxAhIQgMrdwnNWjIjo5uXHCwh4B6KwYZtuDQM2
+      iSv6oD26FPVT2bB/D5aRcHp9d4vc83UbHvMVABEBAAG0QVZhcG9yIGZpeHR1cmUg
+      b25seSAoTk9UIEEgVFJVU1QgQU5DSE9SKSA8Zml4dHVyZUBleGFtcGxlLmludmFs
+      aWQ+iQFRBBMBCgA7FiEEXytrmBrMhLlpmYdn9twib0qvjykFAmlVuQACGwMFCwkI
+      BwICIgIGFQoJCAsCBBYCAwECHgcCF4AACgkQ9twib0qvjykB3gf/dXx+F6xKH8fG
+      6aOWdFITlbtHI8MLDpD7rOd+O8XdA6vQwcBkeWGYrE609/t3BN2BXNfBYip7HPuk
+      12gBseF8A2as/5RMCqxgV+C5mISSUPPcoDLz7fI5c2jT41JuEn4dmFH0AC522OsZ
+      9j1a2dRpB3p0bwXcT2d1v3l/5ybNTPbIrY1Bi4JyPQ2ZTs2hErsakcL/A1RBLv48
+      9d1u491+hHJMZMzteKWzEmpQBNBs6sUpzqSaTR6gnrXoaSctvRmUVyKLBbRN9XMv
+      ufyXivG2HKIS2GjKmxFUBUkRcswQM3fUxC4rR2Dkx4RYgSfh+fsDy8Zzjo9782tY
+      oaaQPODEKw==
+      =NnId
+      -----END PGP PUBLIC KEY BLOCK-----

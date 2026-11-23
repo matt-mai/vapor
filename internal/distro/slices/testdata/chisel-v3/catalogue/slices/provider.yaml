@@ -1,0 +1,7 @@
+# Original counterpart for cross-package path preference validation.
+# SPDX-License-Identifier: CC0-1.0
+package: provider
+slices:
+  data:
+    contents:
+      /usr/share/fixture/preferred: {text: "preferred provider\n"}

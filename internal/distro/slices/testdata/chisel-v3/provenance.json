@@ -1,0 +1,41 @@
+{
+  "license": "CC0-1.0",
+  "origin": "Original synthetic Vapor fixture data; source references are behavioral evidence, not copied payloads.",
+  "baselines": {
+    "chisel": {
+      "repository": "https://github.com/canonical/chisel",
+      "commit": "0a817bd22133d928ff8c3f3fcd5241ca877cbe06",
+      "sourcePaths": [
+        "internal/setup/yaml.go",
+        "internal/setup/setup.go",
+        "internal/setup/setup_test.go",
+        "internal/slicer/slicer.go",
+        "internal/scripts/scripts.go",
+        "internal/manifestutil/manifestutil.go",
+        "public/manifest/manifest.go"
+      ],
+      "researchArchiveSHA256": "146a67a7bdd9931526eaf4ab31c86d83ef40ed8ab904c01defbee30dff5e8c6d"
+    },
+    "chisel-releases": {
+      "repository": "https://github.com/canonical/chisel-releases",
+      "commit": "5500a569c5cf448afda69b25079230d4049fb530",
+      "branch": "ubuntu-26.04",
+      "sourcePaths": [
+        "chisel.yaml",
+        "slices/base-files.yaml",
+        "bin-slices/.gitkeep"
+      ],
+      "researchArchiveSHA256": "d628834af601affec74d0ae37506a9b2a874254faef4564e61e233b3c0dc10e6"
+    }
+  },
+  "files": {
+    "catalogue/bin-slices/demo.yaml": "9014557498c20d5f637aee9696bda1d691a4650d28900f6852605b698ffd83d3",
+    "catalogue/chisel.yaml": "02c4a2f5e739b2c2ed198e485b54873e9de51f521a0efdb45d4a3099e322c611",
+    "catalogue/slices/base-files.yaml": "ef44fb100cb41373f8cdfa916aec7b725ce4218cfd7f6f62279b27d73d7dd8b9",
+    "catalogue/slices/fixture.yaml": "3f7bd73447f109354cdf428fee4ab828ea26b42ef68b789a19776f92feb3356c",
+    "catalogue/slices/provider.yaml": "2213aa989e8f3dd1911026f0f703953f71fbaa76e58c31134b346ddf472a04b6",
+    "expectations.json": "1d99761e526e0eea877a060dbb68fd4185272256b2c55de2a2ffacc84cd079ef",
+    "invalid/list-essential.yaml": "182ea597580e007f712e52c223e885f2c7d6151b8649966609449ffbae52f022",
+    "invalid/mixed-path.yaml": "e7ff05b166355eb6f35f65e2c918d063cfaa4f8ac32a9fd4d4256abdece96ed7"
+  }
+}
