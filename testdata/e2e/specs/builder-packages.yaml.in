@@ -1,0 +1,107 @@
+# A whole-package build image: interpreter with the standard library and pip,
+# apt, and a shell. The build script inside installs a dependency, installs curl
+# with apt, runs the tests and serves the app.
+version: 1
+name: e2e-builder-packages
+image: example.invalid/e2e-builder-packages
+tags: [v1]
+distro: ubuntu
+release: "26.04"
+platforms: [linux/amd64]
+contents:
+  packages:
+    - python3-minimal
+    - python3.14-minimal
+    - libpython3.14-stdlib
+    - python3.14-venv
+    - python3-pip
+    - apt
+    - dpkg
+    - ca-certificates
+    - ubuntu-keyring
+    - bash
+    - dash
+    - coreutils
+    - diffutils
+    - libc-bin
+    - debconf
+    # dpkg maintainer scripts call these, so installing a package fails without
+    # them: libc6's preinst runs sed.
+    - sed
+    - grep
+    - mawk
+    - hostname
+    - perl-base
+  repositories:
+    - name: ubuntu
+      endpoints:
+        - platforms: [linux/amd64]
+          url: https://archive.ubuntu.com/ubuntu
+      suites: [resolute, resolute-security, resolute-updates]
+      components: [main, universe]
+  artifacts:
+    - name: server
+      dest: /app/server.py
+      unpack: false
+      mode: "0644"
+      sources:
+        - platforms: [linux/amd64]
+          path: files/server.py
+          sha256: "@server.py@"
+      sbom:
+        name: vapor-e2e-app
+        version: "1.0.0"
+    - name: greeting
+      dest: /app/greeting.py
+      unpack: false
+      mode: "0644"
+      sources:
+        - platforms: [linux/amd64]
+          path: files/greeting.py
+          sha256: "@greeting.py@"
+      sbom:
+        name: vapor-e2e-app
+        version: "1.0.0"
+    - name: test-greeting
+      dest: /app/test_greeting.py
+      unpack: false
+      mode: "0644"
+      sources:
+        - platforms: [linux/amd64]
+          path: files/test_greeting.py
+          sha256: "@test_greeting.py@"
+      sbom:
+        name: vapor-e2e-app
+        version: "1.0.0"
+    - name: build-script
+      dest: /app/build.sh
+      unpack: false
+      mode: "0755"
+      sources:
+        - platforms: [linux/amd64]
+          path: files/build.sh
+          sha256: "@build.sh@"
+      sbom:
+        name: vapor-e2e-app
+        version: "1.0.0"
+filesystem:
+  # ca-certificates builds its bundle in a maintainer script, and Vapor never runs
+  # one. The bundle is therefore a locked local input, downloaded by run.sh and
+  # pinned by hash in the rendered spec.
+  ca:
+    mode: replace
+    sources: [certs/cacert.pem]
+  paths:
+    - path: /app
+      type: directory
+      mode: "0755"
+container:
+  user: "0:0"
+  entrypoint: [/bin/sh, /app/build.sh]
+  workdir: /app
+hardening:
+  strip-apt-dpkg: false
+  strip-shells: false
+  strip-docs: false
+  remove-suid-sgid: true
+  keep-package-sources: true

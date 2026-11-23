@@ -1,0 +1,102 @@
+# The same build image as builder-packages.yaml, assembled from slices.
+version: 1
+name: e2e-builder-slices
+image: example.invalid/e2e-builder-slices
+tags: [v1]
+distro: ubuntu
+release: "26.04"
+platforms: [linux/amd64]
+contents:
+  catalogues:
+    - name: ubuntu
+      url: https://github.com/canonical/chisel-releases
+      branch: ubuntu-26.04
+  slices:
+    - package: python3.14-minimal
+      slice: bins
+    - package: python3
+      slice: minimal
+    - package: libpython3.14-stdlib
+      slice: internet
+    - package: libpython3.14-stdlib
+      slice: core
+    - package: python3-pip
+      slice: scripts
+    - package: python3.14-venv
+      slice: ensurepip
+    - package: apt
+      slice: apt-get
+    - package: dpkg
+      slice: bins
+    - package: ca-certificates
+      slice: data-with-certs
+    - package: bash
+      slice: bins
+    - package: dash
+      slice: bins
+    - package: coreutils
+      slice: bins
+    - package: diffutils
+      slice: bins
+    - package: libc-bin
+      slice: ldconfig
+  artifacts:
+    - name: server
+      dest: /app/server.py
+      unpack: false
+      mode: "0644"
+      sources:
+        - platforms: [linux/amd64]
+          path: files/server.py
+          sha256: "@server.py@"
+      sbom:
+        name: vapor-e2e-app
+        version: "1.0.0"
+    - name: greeting
+      dest: /app/greeting.py
+      unpack: false
+      mode: "0644"
+      sources:
+        - platforms: [linux/amd64]
+          path: files/greeting.py
+          sha256: "@greeting.py@"
+      sbom:
+        name: vapor-e2e-app
+        version: "1.0.0"
+    - name: test-greeting
+      dest: /app/test_greeting.py
+      unpack: false
+      mode: "0644"
+      sources:
+        - platforms: [linux/amd64]
+          path: files/test_greeting.py
+          sha256: "@test_greeting.py@"
+      sbom:
+        name: vapor-e2e-app
+        version: "1.0.0"
+    - name: build-script
+      dest: /app/build.sh
+      unpack: false
+      mode: "0755"
+      sources:
+        - platforms: [linux/amd64]
+          path: files/build.sh
+          sha256: "@build.sh@"
+      sbom:
+        name: vapor-e2e-app
+        version: "1.0.0"
+filesystem:
+  paths:
+    - path: /app
+      type: directory
+      mode: "0755"
+container:
+  user: "0:0"
+  entrypoint: [/bin/sh, /app/build.sh]
+  workdir: /app
+hardening:
+  strip-apt-dpkg: false
+  strip-shells: false
+  strip-docs: false
+  remove-suid-sgid: true
+  keep-package-sources: true

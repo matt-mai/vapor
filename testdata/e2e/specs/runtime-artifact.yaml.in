@@ -1,0 +1,47 @@
+# A single static Go binary copied from a local file. The runner compiles it and
+# substitutes its hash before locking the image.
+version: 1
+name: e2e-runtime-artifact
+image: example.invalid/e2e-runtime-artifact
+tags: [v1]
+distro: ubuntu
+release: "26.04"
+platforms: [linux/amd64]
+contents:
+  artifacts:
+    - name: server
+      dest: /usr/bin/server
+      unpack: false
+      mode: "0755"
+      sources:
+        - platforms: [linux/amd64]
+          path: files/server-amd64
+          sha256: "@server-amd64@"
+      # A published binary that is not a package has no purl a database indexes, so
+      # the CPE the specification declares is the only handle a scan has on it.
+      sbom:
+        name: vapor-e2e-server
+        version: "1.0.0"
+        cpe: cpe:2.3:a:vapor:e2e-server:1.0.0:*:*:*:*:*:*:*
+filesystem:
+  accounts:
+    groups:
+      - name: app
+        gid: 65532
+    users:
+      - name: app
+        uid: 65532
+        gid: 65532
+        home: /app
+  paths:
+    - path: /app
+      type: directory
+      uid: 65532
+      gid: 65532
+      mode: "0755"
+container:
+  user: "65532:65532"
+  entrypoint: [/usr/bin/server]
+  cmd: ["--listen", "8080"]
+  workdir: /app
+  ports: ["8080/tcp"]

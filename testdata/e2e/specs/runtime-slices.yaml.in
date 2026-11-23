@@ -1,0 +1,63 @@
+# The same runtime as runtime-packages.yaml, assembled from slices. The slicing
+# tool selects the same interpreter and standard library, in smaller pieces.
+version: 1
+name: e2e-runtime-slices
+image: example.invalid/e2e-runtime-slices
+tags: [v1]
+distro: ubuntu
+release: "26.04"
+platforms: [linux/amd64]
+contents:
+  catalogues:
+    - name: ubuntu
+      url: https://github.com/canonical/chisel-releases
+      branch: ubuntu-26.04
+  slices:
+    - package: python3.14-minimal
+      slice: bins
+    - package: python3
+      slice: minimal
+    - package: libpython3.14-stdlib
+      slice: internet
+    - package: libpython3.14-stdlib
+      slice: core
+    # The only selected slice that carries a mutation script: it concatenates the
+    # individual certificates into one bundle and removes the directory it read
+    # them from. Without the script the bundle would hold the placeholder text and
+    # the temporary directory would still be in the image, so a run checks both.
+    - package: ca-certificates
+      slice: data
+  artifacts:
+    - name: server
+      dest: /app/server.py
+      unpack: false
+      mode: "0644"
+      sources:
+        - platforms: [linux/amd64]
+          path: files/server.py
+          sha256: "@server.py@"
+      sbom:
+        name: vapor-e2e-app
+        version: "1.0.0"
+filesystem:
+  accounts:
+    groups:
+      - name: app
+        gid: 65532
+    users:
+      - name: app
+        uid: 65532
+        gid: 65532
+        home: /app
+  paths:
+    - path: /app
+      type: directory
+      uid: 65532
+      gid: 65532
+      mode: "0755"
+container:
+  user: "65532:65532"
+  entrypoint: [/usr/bin/python3, /app/server.py]
+  ports: ["8080/tcp"]
+  workdir: /app
+  stop-signal: SIGTERM

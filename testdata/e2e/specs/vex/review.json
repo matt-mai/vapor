@@ -1,0 +1,17 @@
+{
+  "@context": "https://openvex.dev/ns/v0.2.0",
+  "@id": "https://example.invalid/vex/e2e-review",
+  "author": "vapor e2e",
+  "timestamp": "2026-01-01T00:00:00Z",
+  "version": 1,
+  "statements": [
+    {
+      "vulnerability": {"name": "CVE-2026-0001"},
+      "status": "affected",
+      "action_statement": "Upgrade to a build that does not ship base-files.",
+      "products": [
+        {"@id": "pkg:generic/vapor-e2e-app@1.0.0"}
+      ]
+    }
+  ]
+}

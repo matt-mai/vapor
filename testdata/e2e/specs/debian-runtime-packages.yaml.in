@@ -1,0 +1,76 @@
+# A Debian whole-package runtime image: the interpreter and its standard library,
+# with the application supplied as a local artifact. No shell, no apt, no dpkg.
+#
+# Unlike the Ubuntu specs this one declares both archives by hand: Debian's main
+# archive serves the codename and its updates, and security fixes are published
+# somewhere else, so the security suite is a repository of its own.
+version: 1
+name: e2e-debian-runtime
+image: example.invalid/e2e-debian-runtime
+tags: [v1]
+distro: debian
+release: trixie
+platforms: [linux/amd64]
+contents:
+  packages:
+    # libc6 carries the dynamic loader and base-files the /lib64 link that points
+    # at it, so a program has something to start from.
+    - libc6
+    - base-files
+    - python3-minimal
+    - python3.13-minimal
+    - libpython3.13-stdlib
+    # Nothing declares filesystem.ca here, so the bundle in the image is the one
+    # Vapor builds from this package's own roots. run.sh checks it holds real
+    # certificates, which is what proves the default path works.
+    - ca-certificates
+  repositories:
+    - name: debian
+      endpoints:
+        - platforms: [linux/amd64]
+          url: https://deb.debian.org/debian
+      suites: [trixie, trixie-updates]
+      components: [main]
+    - name: debian-security
+      endpoints:
+        - platforms: [linux/amd64]
+          url: https://security.debian.org/debian-security
+      suites: [trixie-security]
+      components: [main]
+      # A security suite publishes an expiry date; the main archive does not.
+      freshness:
+        valid-until: require
+  artifacts:
+    - name: server
+      dest: /app/server.py
+      unpack: false
+      mode: "0644"
+      sources:
+        - platforms: [linux/amd64]
+          path: files/server.py
+          sha256: "@server.py@"
+      sbom:
+        name: vapor-e2e-app
+        version: "1.0.0"
+filesystem:
+  accounts:
+    groups:
+      - name: app
+        gid: 65532
+    users:
+      - name: app
+        uid: 65532
+        gid: 65532
+        home: /app
+  paths:
+    - path: /app
+      type: directory
+      uid: 65532
+      gid: 65532
+      mode: "0755"
+container:
+  user: "65532:65532"
+  entrypoint: [/usr/bin/python3, /app/server.py]
+  ports: ["8080/tcp"]
+  workdir: /app
+  stop-signal: SIGTERM

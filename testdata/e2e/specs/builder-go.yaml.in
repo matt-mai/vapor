@@ -1,0 +1,82 @@
+# Build Vapor with the pinned Go release and run the resulting binary in the image.
+version: 1
+name: e2e-builder-go
+image: example.invalid/e2e-builder-go
+tags: [v1]
+distro: ubuntu
+release: "26.04"
+platforms: [linux/amd64]
+contents:
+  packages:
+    - base-files
+    - ca-certificates
+    - bash
+    - dash
+    - coreutils
+    - sed
+    - grep
+    - diffutils
+    - libc-bin
+    - libc6
+  repositories:
+    - name: ubuntu
+      endpoints:
+        - platforms: [linux/amd64]
+          url: https://archive.ubuntu.com/ubuntu
+      suites: [resolute, resolute-security, resolute-updates]
+      components: [main, universe]
+  artifacts:
+    - name: go-toolchain
+      dest: /usr/local
+      unpack: true
+      sources:
+        - platforms: [linux/amd64]
+          url: https://go.dev/dl/go1.27.4.linux-amd64.tar.gz
+          sha256: 7226736c2339719cda28fbf3a54d71aa63bcefe376e98cef00034268dab24840
+      sbom:
+        name: go
+        version: "1.27.4"
+    - name: vapor-src
+      dest: /src
+      unpack: true
+      sources:
+        - platforms: [linux/amd64]
+          path: files/vapor-src.tar.gz
+          sha256: "@vapor-src.tar.gz@"
+      sbom:
+        name: vapor
+        version: "0.0.0"
+    - name: build-go
+      dest: /app/build-go.sh
+      unpack: false
+      mode: "0755"
+      sources:
+        - platforms: [linux/amd64]
+          path: files/build-go.sh
+          sha256: "@build-go.sh@"
+      sbom:
+        name: vapor-e2e-app
+        version: "1.0.0"
+filesystem:
+  ca:
+    mode: replace
+    sources: [certs/cacert.pem]
+  paths:
+    - path: /app
+      type: directory
+      mode: "0755"
+container:
+  user: "0:0"
+  entrypoint: [/bin/sh, /app/build-go.sh]
+  workdir: /src
+  env:
+    GOPATH: /tmp/go
+    GOCACHE: /tmp/go-cache
+    CGO_ENABLED: "0"
+    GOTOOLCHAIN: local
+hardening:
+  strip-shells: false
+  strip-apt-dpkg: false
+  strip-docs: false
+  remove-suid-sgid: true
+  keep-package-sources: true

@@ -1,0 +1,120 @@
+# A Debian build image: interpreter with pip, apt and a shell. The build script
+# inside installs a dependency, installs curl with apt-get from the archives this
+# image carries, runs the tests and serves the app.
+#
+# This is the image that proves Debian package management works end to end: the
+# generated source list names both archives, each with its own reviewed keyring, and
+# apt resolves from them without a maintainer script ever having run at build time.
+version: 1
+name: e2e-debian-builder
+image: example.invalid/e2e-debian-builder
+tags: [v1]
+distro: debian
+release: trixie
+platforms: [linux/amd64]
+contents:
+  packages:
+    - python3-minimal
+    - python3.13-minimal
+    - libpython3.13-stdlib
+    - python3.13-venv
+    - python3-pip
+    - apt
+    - dpkg
+    - ca-certificates
+    - debian-archive-keyring
+    - bash
+    - dash
+    - coreutils
+    - diffutils
+    - libc-bin
+    - debconf
+    - base-files
+    # dpkg maintainer scripts call these, so installing a package fails without
+    # them: libc6's preinst runs sed.
+    - sed
+    - grep
+    - mawk
+    - hostname
+    - perl-base
+  repositories:
+    - name: debian
+      endpoints:
+        - platforms: [linux/amd64]
+          url: https://deb.debian.org/debian
+      suites: [trixie, trixie-updates]
+      components: [main]
+    - name: debian-security
+      endpoints:
+        - platforms: [linux/amd64]
+          url: https://security.debian.org/debian-security
+      suites: [trixie-security]
+      components: [main]
+      freshness:
+        valid-until: require
+  artifacts:
+    - name: server
+      dest: /app/server.py
+      unpack: false
+      mode: "0644"
+      sources:
+        - platforms: [linux/amd64]
+          path: files/server.py
+          sha256: "@server.py@"
+      sbom:
+        name: vapor-e2e-app
+        version: "1.0.0"
+    - name: greeting
+      dest: /app/greeting.py
+      unpack: false
+      mode: "0644"
+      sources:
+        - platforms: [linux/amd64]
+          path: files/greeting.py
+          sha256: "@greeting.py@"
+      sbom:
+        name: vapor-e2e-app
+        version: "1.0.0"
+    - name: test-greeting
+      dest: /app/test_greeting.py
+      unpack: false
+      mode: "0644"
+      sources:
+        - platforms: [linux/amd64]
+          path: files/test_greeting.py
+          sha256: "@test_greeting.py@"
+      sbom:
+        name: vapor-e2e-app
+        version: "1.0.0"
+    - name: build-script
+      dest: /app/build.sh
+      unpack: false
+      mode: "0755"
+      sources:
+        - platforms: [linux/amd64]
+          path: files/build.sh
+          sha256: "@build.sh@"
+      sbom:
+        name: vapor-e2e-app
+        version: "1.0.0"
+filesystem:
+  # ca-certificates builds its bundle in a maintainer script, which Vapor never
+  # runs. The bundle is a locked local input instead, downloaded by run.sh and
+  # pinned by hash in the rendered spec.
+  ca:
+    mode: replace
+    sources: [certs/cacert.pem]
+  paths:
+    - path: /app
+      type: directory
+      mode: "0755"
+container:
+  user: "0:0"
+  entrypoint: [/bin/sh, /app/build.sh]
+  workdir: /app
+hardening:
+  strip-apt-dpkg: false
+  strip-shells: false
+  strip-docs: false
+  remove-suid-sgid: true
+  keep-package-sources: true

@@ -1,0 +1,165 @@
+# Python runtime from whole packages: interpreter and standard library, plus the
+# application supplied as a local artifact. No shell, no apt, no dpkg tooling, and
+# the hardening passes remove any that a package would otherwise drag in.
+#
+# This is the runtime every runtime check runs against, so it carries the things a
+# second specification would only duplicate:
+#
+#   - two platforms, which is what makes it the only image proving a mixed-architecture
+#     index and cross-architecture package resolution (amd64 from the main archive,
+#     arm64 from the ports archive);
+#   - a certificate authority the specification imported, which the `ca` test proves
+#     is trusted rather than merely written;
+#   - the three VEX claims, one from each source the generator reads.
+#
+# python3.14-minimal carries a version expression rather than a name alone, so a run
+# proves the archive is searched for a version in the range, on both platforms.
+version: 1
+name: e2e-runtime-packages
+image: example.invalid/e2e-runtime-packages
+tags: [v1]
+distro: ubuntu
+release: "26.04"
+platforms: [linux/amd64, linux/arm64]
+contents:
+  packages:
+    # libc6 carries the dynamic loader; base-files carries the /lib64 link that
+    # points at it. Nothing is implicit, so an image that needs to run a program
+    # must name both.
+    - libc6
+    - base-files
+    - python3-minimal
+    - name: python3.14-minimal
+      version: "~> 3.14"
+    - libpython3.14-stdlib
+    # The package that owns the bundle path. Its own bundle is built by a maintainer
+    # script Vapor never runs, so the file comes from filesystem.ca instead.
+    - ca-certificates
+  repositories:
+    - name: ubuntu
+      endpoints:
+        - platforms: [linux/amd64]
+          url: https://archive.ubuntu.com/ubuntu
+        - platforms: [linux/arm64]
+          url: https://ports.ubuntu.com/ubuntu-ports
+      suites: [resolute, resolute-security, resolute-updates]
+      components: [main, universe]
+  artifacts:
+    - name: server
+      dest: /app/server.py
+      unpack: false
+      mode: "0644"
+      sources:
+        # A script is the same bytes on both architectures, so one source
+        # covers both platforms instead of two identical files.
+        - platforms: [linux/amd64, linux/arm64]
+          path: files/server.py
+          sha256: "@server.py@"
+      sbom:
+        name: vapor-e2e-app
+        version: "1.0.0"
+    # The CA check runs in this image, so its observations arrive as files where
+    # nothing else can overwrite them. The image still has no shell and no package
+    # manager: these are data and one script, not tooling.
+    - name: tls-check
+      uid: 65532
+      gid: 65532
+      dest: /app/tls.py
+      unpack: false
+      mode: "0644"
+      sources:
+        - platforms: [linux/amd64, linux/arm64]
+          path: files/tls.py
+          sha256: "@tls.py@"
+      sbom:
+        name: vapor-e2e-tls-check
+        version: "1.0.0"
+    - name: server-cert
+      uid: 65532
+      gid: 65532
+      dest: /app/ca/server.pem
+      unpack: false
+      mode: "0644"
+      sources:
+        - platforms: [linux/amd64, linux/arm64]
+          path: files/server.pem
+          sha256: "@server.pem@"
+      sbom:
+        name: vapor-e2e-ca-server-cert
+        version: "1.0.0"
+    - name: server-key
+      uid: 65532
+      gid: 65532
+      dest: /app/ca/server.key
+      unpack: false
+      mode: "0600"
+      sources:
+        - platforms: [linux/amd64, linux/arm64]
+          path: files/server.key
+          sha256: "@server.key@"
+      sbom:
+        name: vapor-e2e-ca-server-key
+        version: "1.0.0"
+    - name: unrelated-cert
+      uid: 65532
+      gid: 65532
+      dest: /app/ca/untrusted.pem
+      unpack: false
+      mode: "0644"
+      sources:
+        - platforms: [linux/amd64, linux/arm64]
+          path: files/untrusted.pem
+          sha256: "@untrusted.pem@"
+      sbom:
+        name: vapor-e2e-ca-unrelated
+        version: "1.0.0"
+# Three claims, one from each source the generator reads: an inline claim about a
+# package with evidence that the vulnerable file is not in the image, the same for
+# an artifact, and an imported OpenVEX document. Every kind of source has to end up
+# in the attached statement, so the e2e check asserts all three vulnerabilities.
+vex:
+  inputs:
+    - review.json
+  assertions:
+    - vulnerability: CVE-2026-0002
+      package: libc6
+      status: not_affected
+      justification: vulnerable_code_not_present
+      statement: The image carries no debug symbols for libc6.
+      absent-paths:
+        - /usr/lib/debug/libc.so.6
+    - vulnerability: CVE-2026-0003
+      artifact: server
+      status: not_affected
+      justification: component_not_present
+      statement: The server does not use the affected component.
+      absent-paths:
+        - /app/vulnerable.py
+filesystem:
+  ca:
+    # Two sources: the public roots from a bundle pinned by hash in the rendered
+    # spec, and the certificate authority run.sh just created. append keeps the
+    # order the sources are declared in.
+    mode: append
+    sources: [certs/cacert.pem, certs/e2e-ca.pem]
+  accounts:
+    groups:
+      - name: app
+        gid: 65532
+    users:
+      - name: app
+        uid: 65532
+        gid: 65532
+        home: /app
+  paths:
+    - path: /app
+      type: directory
+      uid: 65532
+      gid: 65532
+      mode: "0755"
+container:
+  user: "65532:65532"
+  entrypoint: [/usr/bin/python3, /app/server.py]
+  ports: ["8080/tcp"]
+  workdir: /app
+  stop-signal: SIGTERM
