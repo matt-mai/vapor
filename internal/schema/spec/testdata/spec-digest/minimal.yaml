@@ -1,0 +1,5 @@
+version: 1
+name: ubuntu-minimal
+image: ghcr.io/example/ubuntu-minimal
+distro: ubuntu
+release: "26.04"

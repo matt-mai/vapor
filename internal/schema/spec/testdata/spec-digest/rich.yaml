@@ -1,0 +1,75 @@
+version: 1
+name: ubuntu-rich
+image: ghcr.io/example/ubuntu-rich
+distro: ubuntu
+release: "26.04"
+platforms: [linux/arm64, linux/amd64]
+tags: [stable, v1]
+annotations: {z: "<>&\u2028\u2029é", a: first}
+container:
+  user: "65532:65532"
+  entrypoint: [/app/server, --listen]
+  cmd: ["", "8080"]
+  workdir: /app
+  ports: ["8080", "8080/udp"]
+  stop-signal: SIGTERM
+  env: {Z: "line\nnext", A: "quoted\"\\text"}
+contents:
+  packages: [{name: openssl, version: "= 3.0-1"}]
+  catalogues:
+    - name: custom
+      url: https://example.com/catalogue
+      branch: ubuntu-26.04
+      archives: {ubuntu: main}
+    - name: local
+      path: catalogues/local
+  slices: [{package: base-files, slice: release-info, catalogue: custom}]
+  repositories:
+    - name: main
+      suites: [resolute, resolute-updates]
+      components: [main, universe]
+      endpoints:
+        - platforms: [linux/arm64, linux/amd64]
+          url: https://example.com/ubuntu
+      trust:
+        keys:
+          - path: keys/repo.asc
+            fingerprints: ["0123456789ABCDEF0123456789ABCDEF01234567"]
+  artifacts:
+    - name: server
+      dest: /app/server
+      unpack: false
+      uid: 4294967295
+      gid: 65532
+      sources:
+        - platforms: [linux/arm64, linux/amd64]
+          url: https://example.com/server
+          sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+      sbom: {name: server, version: "1.0"}
+  slices-engine: {max-steps: 9007199254740993}
+filesystem:
+  paths:
+    - {path: /app, type: directory}
+    - {path: /app/current, type: symlink, target: /app/server}
+    - {path: /marker, type: file}
+  accounts:
+    users: [{name: app, uid: 65532, gid: 65532}]
+    groups: [{name: app, gid: 65532}]
+  timezone: UTC
+  ca: {mode: append, sources: [certs/company.pem, certs/extra.pem]}
+  os-release: {PRETTY_NAME: "Custom \"image\"", NAME: Custom}
+hardening: {strip-docs: false}
+sbom: {enabled: false}
+vex:
+  inputs: [vex/review.json, vex/supplement.json]
+  assertions:
+    - vulnerability: CVE-2026-0001
+      package: openssl
+      status: not_affected
+      statement: Reviewed against the selected inputs.
+      justification: vulnerable_code_not_present
+      absent-paths: [/usr/bin/unused, /usr/lib/unused]
+    - vulnerability: GHSA-example
+      artifact: server
+      status: under_investigation
+      statement: Review pending.
