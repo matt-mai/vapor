@@ -156,9 +156,9 @@ Debian and Ubuntu maintainers who build them.
 
 ## Licence
 
-Split licensing, described in [LICENSE](LICENSE):
+Split licensing, described in [LICENSING.md](LICENSING.md):
 
-- The toolchain, CLI and Go source are under EUPL-1.2.
+- The toolchain, CLI and Go source are under EUPL-1.2, see [LICENSE](LICENSE).
 - Documentation, examples and templates are under CC0-1.0, see
   [LICENSE-CC0](LICENSE-CC0).
 - Your specifications, lock files and the images built from them are yours, with

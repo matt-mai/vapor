@@ -3,7 +3,26 @@ name: ci
 on:
   push:
     branches: [main]
+    paths: &code
+      # Only a change to something a build or test reads can fail these jobs, so a
+      # documentation-only change skips CI instead of paying for a cold Go build.
+      - '**/*.go'
+      - go.mod
+      - go.sum
+      - Taskfile.yml
+      - .golangci.yml
+      # Embedded archive keys: changing one changes what every build trusts.
+      - 'internal/**/keys/*.asc'
+      # Fixtures and mock tooling the tests read, and the workflow that runs them.
+      - '**/testdata/**'
+      - '.github/workflows/**'
+      # Documents a test parses as its expected vectors; editing one can fail a test.
+      - docs/developer/lock-schema.md
+      - docs/developer/attest.md
+      - docs/developer/conformance-matrix.md
+      - docs/developer/chisel-v3-compatibility.md
   pull_request:
+    paths: *code
   workflow_dispatch:
 
 permissions:

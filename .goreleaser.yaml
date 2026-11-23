@@ -31,6 +31,7 @@ archives:
     files:
       - LICENSE
       - LICENSE-CC0
+      - LICENSING.md
       - README.md
 
 checksum:
