@@ -1,0 +1,45 @@
+version: 2
+
+project_name: vapor
+
+before:
+  hooks:
+    - go mod verify
+
+builds:
+  - id: vaporize
+    main: ./cmd/vaporize
+    binary: vaporize
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+    # A binary built by this pipeline has no module version to report, so the tag is
+    # stamped in. The tag keeps its "v", which is the form a module version takes and
+    # the form provenance statements already record.
+    ldflags:
+      - -s -w -X main.version={{ .Tag }}
+
+archives:
+  - formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - LICENSE
+      - LICENSE-CC0
+      - README.md
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  use: github
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
