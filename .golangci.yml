@@ -1,0 +1,113 @@
+version: "2"
+run:
+  timeout: 5m
+  relative-path-mode: gomod # stable paths for CI and local runs
+  tests: true # lint tests too
+  modules-download-mode: readonly
+  allow-parallel-runners: true # faster in CI
+  allow-serial-runners: true
+linters:
+  default: none
+  enable:
+    - errcheck
+    - goconst
+    - gocritic
+    - gosec
+    - govet
+    - ineffassign
+    - misspell
+    - staticcheck
+    - unconvert
+    - unparam
+    - unused
+    - lll
+    # --- Complexity, Length & Anti-AI Shortcuts ---
+    - gocyclo
+    - gocognit
+    - funlen
+    - nestif
+    - bodyclose
+    - noctx
+    - prealloc
+    - nilnil
+    - revive
+  settings:
+    goconst:
+      min-len: 3
+      min-occurrences: 3
+    lll:
+      line-length: 130
+      tab-width: 4
+    gocyclo:
+      min-complexity: 20
+    gocognit:
+      min-complexity: 12
+    funlen:
+      lines: 65
+      statements: 40
+    nestif:
+      min-complexity: 4
+    gocritic:
+      disabled-checks:
+        - unnamedResult
+        - whyNoLint
+      enabled-tags:
+        - diagnostic
+        - experimental
+        - performance
+        - style
+    govet:
+      disable:
+        - fieldalignment # struct order follows readability, not padding
+      enable-all: true
+    misspell:
+      locale: US
+  exclusions:
+    generated: lax
+    presets:
+      - common-false-positives
+      - std-error-handling
+    rules:
+      - linters:
+          - goconst
+          - gosec
+          - lll
+          - funlen
+          - gocyclo
+          - gocognit
+          - nestif
+        path: _test\.go
+      - linters:
+          - gocritic
+        text: "hugeParam"
+        path: _test\.go
+      # SandboxLimits is an immutable configuration value copied once per script
+      # run, not a hot-loop payload. It crossed gocritic's 80-byte threshold when
+      # MaxImageBytes was added; passing it by pointer would only spread the
+      # indirection through the public API and its tests.
+      - linters:
+          - gocritic
+        text: "hugeParam: (l|limits) is heavy"
+        path: internal/mutation/
+      - linters:
+          - misspell
+        text: "is a misspelling of `(?i)catalog"
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  uniq-by-line: true
+  new: false # report all issues, not just new ones
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

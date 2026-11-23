@@ -1,0 +1,79 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: v2.15.0
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      # The mutation sandbox needs an unprivileged user namespace: it confines each
+      # script with CLONE_NEWUSER|NEWNS|NEWPID|NEWNET and then chroots. GitHub's
+      # Ubuntu 24.04+ runners ship AppArmor's unprivileged-userns restriction, which
+      # denies exactly that, so every build fails "worker could not confine itself".
+      # Lifting the restriction is what the runner images themselves recommend; the
+      # sandbox's own guarantees are unchanged, and the tests below still prove them.
+      - name: Allow the unprivileged user namespaces the sandbox needs
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
+      # A hang should fail with a stack, not the runner's bare SIGTERM.
+      - run: go test -race -cover -timeout 120s ./...
+      - name: Test mutation sandbox memory limits without the race detector
+        run: go test ./internal/mutation
+      # The helpers below run the real checkers against mock tooling, so they belong
+      # with the unit tests rather than with the live e2e run.
+      - name: Test the e2e helpers against mock tooling
+        run: |
+          bash testdata/e2e/catalogue_test.sh
+          bash testdata/e2e/check-filesystem_test.sh
+          bash testdata/e2e/check-tarball_test.sh
+      - name: Test the attestation checker against mock statements
+        run: python3 testdata/e2e/attestations_test.py
+
+  # The Debian cases read a live archive, need a container engine and take about
+  # twenty minutes, so they run on main and on request rather than on every pull
+  # request. Both are on the rebuild list, so this also proves a second build of one
+  # lock produces the same index digest.
+  e2e-debian:
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Install uv and podman
+        run: |
+          python3 -m pip install --user uv
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          sudo apt-get update
+          sudo apt-get install -y podman
+      - name: Run the Debian images end to end
+        env:
+          CONTAINER_ENGINE: podman
+        run: ./testdata/e2e/run.sh debian-builder-packages debian-runtime-packages

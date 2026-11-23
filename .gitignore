@@ -1,0 +1,46 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+bin/
+/vapor
+/vaporize
+
+# Test binary, built with `go test -c`
+*.test
+
+# Code coverage profiles and other test artifacts
+*.out
+coverage.*
+!coverage.go
+*.coverprofile
+profile.cov
+
+# generated data from e2e tests
+__pycache__
+.mypy_cache/
+testdata/e2e/.work
+
+# Go workspace file
+go.work
+go.work.sum
+
+# Editor/IDE
+.idea/
+.vscode/
+
+# Local scratch planning (the implementation plan and CONTEXT.md are tracked)
+plan.md
+todo.md
+
+# vapor generated files
+cache/
+!internal/cache/
+!internal/cache/**
+cache-dir/
+dist/
+
+# secrets
+.env

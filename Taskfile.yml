@@ -1,0 +1,95 @@
+version: "3"
+
+tasks:
+  default:
+    desc: List available tasks
+    cmds:
+      - task --list
+
+  build:
+    desc: Build the vaporize CLI into bin/vaporize
+    cmds:
+      - go build -o bin/vaporize ./cmd/vaporize
+
+  install:
+    desc: Build the vaporize CLI into ~/.local/bin
+    cmds:
+      - go build -o "{{.HOME}}/.local/bin/vaporize" ./cmd/vaporize
+
+  check:
+    desc: Run the fast local gate (lint and tests without the race detector)
+    cmds:
+      - task: lint
+      - task: test
+
+  test:full:
+    desc: Run full test suite including unit and e2e tests
+    deps:
+      - task: test:race
+      - task: test:mutation
+      - task: test:e2e
+
+  test:
+    desc: Run tests with coverage, including the offline helper suites
+    cmds:
+      - go test -cover ./...
+      - bash testdata/e2e/catalogue_test.sh
+      - bash testdata/e2e/check-filesystem_test.sh
+      - bash testdata/e2e/check-tarball_test.sh
+      - python3 testdata/e2e/attestations_test.py
+
+  test:race:
+    desc: Run unit tests with race flag
+    cmds:
+      - go test -race -cover ./...
+
+  test:mutation:
+    desc: Run mutation tests without race instrumentation to cover sandbox memory limits
+    cmds:
+      - go test ./internal/mutation
+
+  test:e2e:
+    desc: Run the end-to-end suite (all images, ~20 min; pass names to narrow it)
+    dir: testdata/e2e
+    cmds:
+      - ./run.sh {{.CLI_ARGS}}
+
+  lint:
+    desc: Run static analysis and linter
+    cmds:
+      # A retired setting lints fine but fails the schema check CI enforces, so it
+      # is caught here rather than after a push.
+      - golangci-lint config verify
+      - golangci-lint run ./...
+
+  cover:
+    desc: Run tests and generate coverage summary
+    cmds:
+      - go test -coverprofile=coverage.out ./...
+      - go tool cover -func=coverage.out
+
+  fmt:
+    desc: Format Go source files
+    cmds:
+      - gofmt -w -s .
+
+  fix:
+    desc: Automatically fix linting issues, formatting, and outdated Go code
+    deps:
+      - task: fmt
+    cmds:
+      - golangci-lint run --fix ./...
+      - go fix ./...
+
+  tidy:
+    desc: Tidy and verify Go module dependencies
+    cmds:
+      - go mod tidy
+
+  clean:
+    desc: Remove build artifacts and coverage profiles
+    cmds:
+      - rm -f coverage.out coverage.html
+      - rm -rf bin/
+      - rm -rf dist/
+      - rm -rf testdata/e2e/.work
