@@ -145,8 +145,10 @@ vaporize: operation failed: artifact "server" on linux/amd64: download failed: r
 ```
 
 The host redirected the download to an address that carries credentials or is not
-HTTP(S), and Vapor refuses to send the request there. Use a URL that serves the
-file directly, or a local `path`.
+HTTP(S), or to a plaintext address that carries a query, and Vapor refuses to send
+the request there. A query on a redirect target is the server's signature, and
+plaintext would publish it. Use a URL that serves the file directly, or a local
+`path`.
 
 ```text
 vaporize: operation failed: 15 referenced blobs are absent from the cache

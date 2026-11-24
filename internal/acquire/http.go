@@ -35,16 +35,7 @@ func (f HTTPFetcher) Fetch(ctx context.Context, url string) (io.ReadCloser, erro
 	if f.Client != nil {
 		*client = *f.Client
 	}
-	callerRedirect := client.CheckRedirect
-	client.CheckRedirect = func(request *http.Request, via []*http.Request) error {
-		if err := checkRedirect(request, via); err != nil {
-			return &redirectRefusal{cause: err}
-		}
-		if callerRedirect != nil {
-			return callerRedirect(request, via)
-		}
-		return nil
-	}
+	client.CheckRedirect = redirectPolicy(client.CheckRedirect)
 	policy := f.Policy
 	if policy.Attempts <= 0 {
 		policy = retry.Default()
@@ -113,6 +104,26 @@ type redirectRefusal struct {
 
 func (e *redirectRefusal) Error() string { return e.cause.Error() }
 func (e *redirectRefusal) Unwrap() error { return e.cause }
+
+// redirectPolicy bounds and filters redirects, then hands the decision to the
+// caller's own policy when there is one.
+func redirectPolicy(caller func(*http.Request, []*http.Request) error) func(*http.Request, []*http.Request) error {
+	return func(request *http.Request, via []*http.Request) error {
+		if err := checkRedirect(request, via); err != nil {
+			return &redirectRefusal{cause: err}
+		}
+		if caller != nil {
+			if err := caller(request, via); err != nil {
+				return err
+			}
+		}
+		// Go fills in a Referer from the previous hop, and a signed asset URL keeps
+		// its signature in the query. A build request has no referring page, so no
+		// hop is told where the last one came from.
+		request.Header.Del("Referer")
+		return nil
+	}
+}
 
 func checkRedirect(request *http.Request, via []*http.Request) error {
 	if len(via) >= 5 {

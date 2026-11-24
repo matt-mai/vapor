@@ -176,10 +176,11 @@ func TestHTTPFetcherGivesUpAfterItsAttempts(t *testing.T) {
 }
 
 // A GitHub release asset redirects to a signed URL, and its query is the signature
-// rather than a credential: refusing it makes every release asset unfetchable.
+// rather than a credential: refusing it makes every release asset unfetchable. The
+// target is HTTPS, which is what keeps the signature from traveling in clear text.
 func TestHTTPFetcherFollowsASignedRedirect(t *testing.T) {
 	var server *httptest.Server
-	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server = httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/asset" {
 			if r.URL.RawQuery != "sp=r&sig=abc" {
 				t.Errorf("redirect query = %q", r.URL.RawQuery)
@@ -190,7 +191,7 @@ func TestHTTPFetcherFollowsASignedRedirect(t *testing.T) {
 		http.Redirect(w, r, server.URL+"/asset?sp=r&sig=abc", http.StatusFound)
 	}))
 	defer server.Close()
-	reader, err := (acquire.HTTPFetcher{}).Fetch(t.Context(), server.URL+"/release")
+	reader, err := (acquire.HTTPFetcher{Client: server.Client()}).Fetch(t.Context(), server.URL+"/release")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -201,6 +202,48 @@ func TestHTTPFetcherFollowsASignedRedirect(t *testing.T) {
 	}
 	if string(data) != "signed bytes" {
 		t.Fatalf("payload = %q", data)
+	}
+}
+
+// A redirect from one host to another must not carry the previous URL, query and all,
+// as a Referer: a signed asset URL signs itself with its query.
+func TestHTTPFetcherDoesNotSendARefererAcrossOrigins(t *testing.T) {
+	target := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if referer := r.Header.Get("Referer"); referer != "" {
+			t.Errorf("referer = %q", referer)
+		}
+		_, _ = io.WriteString(w, "signed bytes")
+	}))
+	defer target.Close()
+	source := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, target.URL+"/asset?sig=abc", http.StatusFound)
+	}))
+	defer source.Close()
+	reader, err := (acquire.HTTPFetcher{Client: source.Client()}).Fetch(t.Context(), source.URL+"/release")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = reader.Close() }()
+	if _, err := io.ReadAll(reader); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A signed target is an HTTPS target: a signature in a plaintext query is published,
+// and verifying the payload's digest does not un-publish it.
+func TestHTTPFetcherRefusesASignedPlaintextRedirect(t *testing.T) {
+	var calls int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		http.Redirect(w, r, "http://example.invalid/asset?sig=abc", http.StatusFound)
+	}))
+	defer server.Close()
+	if _, err := (acquire.HTTPFetcher{}).Fetch(t.Context(), server.URL+"/release"); err == nil ||
+		!strings.Contains(err.Error(), "must be an HTTPS URL") {
+		t.Fatalf("error = %v", err)
+	}
+	if calls != 1 {
+		t.Fatalf("calls = %d", calls)
 	}
 }
 

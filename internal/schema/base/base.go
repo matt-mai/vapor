@@ -32,27 +32,40 @@ func ValidateInputURL(value string, httpsOnly bool) error {
 	if err != nil {
 		return &inputError{message: "input URL is malformed", cause: err}
 	}
-	if (u.Scheme != "https" && (httpsOnly || u.Scheme != "http")) || u.Hostname() == "" ||
-		u.User != nil || u.RawQuery != "" || u.ForceQuery || strings.ContainsRune(value, '#') ||
-		u.Opaque != "" || strings.HasSuffix(u.Host, ":") {
+	if (u.Scheme != schemeHTTPS && (httpsOnly || u.Scheme != schemeHTTP)) || !usableHost(u) ||
+		u.User != nil || u.RawQuery != "" || u.ForceQuery || strings.ContainsRune(value, '#') {
 		return errors.New("input URL requires an allowed HTTP(S) scheme and hostname, without credentials, query or fragment")
 	}
 	return nil
 }
 
 // ValidateRedirectURL checks a redirect target. A server signs its own asset URL,
-// so a redirect may carry a query where a declared input may not.
+// so a redirect may carry a query where a declared input may not. The query is also
+// why a target with one must be HTTPS: a signature sent in clear text is a signature
+// published, and the digest check that follows protects the bytes, not the proof.
 func ValidateRedirectURL(value string) error {
 	u, err := url.Parse(value)
 	if err != nil {
 		return &inputError{message: "redirect target is malformed", cause: err}
 	}
-	if (u.Scheme != "https" && u.Scheme != "http") || u.Hostname() == "" ||
-		u.User != nil || strings.ContainsRune(value, '#') ||
-		u.Opaque != "" || strings.HasSuffix(u.Host, ":") {
+	if (u.Scheme != schemeHTTPS && u.Scheme != schemeHTTP) || !usableHost(u) ||
+		u.User != nil || strings.ContainsRune(value, '#') {
 		return errors.New("redirect target is not a credential-free HTTP(S) URL")
 	}
+	if (u.RawQuery != "" || u.ForceQuery) && u.Scheme != schemeHTTPS {
+		return errors.New("redirect target with a query must be an HTTPS URL")
+	}
 	return nil
+}
+
+const (
+	schemeHTTPS = "https"
+	schemeHTTP  = "http"
+)
+
+// usableHost rejects the host forms url.Parse accepts but a fetch cannot use.
+func usableHost(u *url.URL) bool {
+	return u.Hostname() != "" && u.Opaque == "" && !strings.HasSuffix(u.Host, ":")
 }
 
 // ValidateLocalPath checks a clean, relative, slash-separated path.

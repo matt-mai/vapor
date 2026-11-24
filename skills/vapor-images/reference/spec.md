@@ -156,8 +156,9 @@ Rules that bite:
   fragment. Redirects are followed (up to five), and a target may carry a query,
   so `github.com/<owner>/<repo>/releases/download/...` works: it redirects to
   `release-assets.githubusercontent.com` with a signed query. A target that adds
-  credentials or leaves HTTP(S) is refused and reports `download failed` with no
-  further detail.
+  credentials, leaves HTTP(S), or carries a query over plaintext is refused and
+  reports `download failed` with no further detail. Vapor sends no `Referer` on a
+  redirect, so one hop's signature is never handed to the next.
 - `unpack: true` re-roots the archive under `dest` and keeps the archive's own
   modes and uid/gid. Archives may be gzip, zstd or xz. Contents cannot escape
   `dest`. A tarball with a versioned top directory keeps it, so expose binaries
