@@ -175,6 +175,49 @@ func TestHTTPFetcherGivesUpAfterItsAttempts(t *testing.T) {
 	}
 }
 
+// A GitHub release asset redirects to a signed URL, and its query is the signature
+// rather than a credential: refusing it makes every release asset unfetchable.
+func TestHTTPFetcherFollowsASignedRedirect(t *testing.T) {
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/asset" {
+			if r.URL.RawQuery != "sp=r&sig=abc" {
+				t.Errorf("redirect query = %q", r.URL.RawQuery)
+			}
+			_, _ = io.WriteString(w, "signed bytes")
+			return
+		}
+		http.Redirect(w, r, server.URL+"/asset?sp=r&sig=abc", http.StatusFound)
+	}))
+	defer server.Close()
+	reader, err := (acquire.HTTPFetcher{}).Fetch(t.Context(), server.URL+"/release")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = reader.Close() }()
+	data, readErr := io.ReadAll(reader)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if string(data) != "signed bytes" {
+		t.Fatalf("payload = %q", data)
+	}
+}
+
+// A redirect may carry a query, but never a credential or a non-HTTP scheme.
+func TestHTTPFetcherRefusesACredentialedRedirect(t *testing.T) {
+	for _, target := range []string{"ftp://example.invalid/input", "https://user:pass@example.invalid/input"} {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Location", target)
+			w.WriteHeader(http.StatusFound)
+		}))
+		if _, err := (acquire.HTTPFetcher{}).Fetch(t.Context(), server.URL+"/input"); err == nil {
+			t.Fatalf("redirect to %q was accepted", target)
+		}
+		server.Close()
+	}
+}
+
 // A refused redirect is a policy answer: following it would send the request
 // somewhere the caller did not choose, and asking again changes nothing.
 func TestHTTPFetcherDoesNotRetryARefusedRedirect(t *testing.T) {

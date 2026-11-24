@@ -118,8 +118,7 @@ func checkRedirect(request *http.Request, via []*http.Request) error {
 	if len(via) >= 5 {
 		return errors.New("too many redirects")
 	}
-	if err := base.ValidateInputURL(request.URL.String(), false); err != nil {
-		return errors.New("redirect target is not a credential-free HTTP(S) URL")
-	}
-	return nil
+	// A declared input URL carries no query, but a redirect to a signed asset URL
+	// does; the target is never recorded or printed with its query.
+	return base.ValidateRedirectURL(request.URL.String())
 }

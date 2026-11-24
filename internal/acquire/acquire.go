@@ -115,7 +115,7 @@ func acquirePackage(ctx context.Context, fetcher Fetcher, store Store, pkg *Pack
 	storeErr := store.Store(reader, pkg.SHA256, pkg.Size)
 	closeErr := reader.Close()
 	if storeErr != nil {
-		return PackageRecord{}, storeErr
+		return PackageRecord{}, storeFailure(storeErr)
 	}
 	if closeErr != nil {
 		return PackageRecord{}, &fetchError{cause: closeErr}
@@ -378,7 +378,7 @@ func acquireArtifact(ctx context.Context, fetcher Fetcher, local Local, store St
 		return 0, errors.New("rewind downloaded payload")
 	}
 	if err := store.Store(file, artifact.SHA256, written); err != nil {
-		return 0, err
+		return 0, storeFailure(err)
 	}
 	return written, nil
 }
@@ -425,11 +425,40 @@ func contains(values []string, want string) bool {
 	return slices.Contains(values, want)
 }
 
-// downloadError can contain credentialed URLs; expose the cause only through error inspection.
+// storeFailure reports a stalled payload read. The bytes come from the network and
+// only pass through the cache writer, so a timeout here is a download that ran out of
+// time; naming it a cache failure sends the reader looking in the wrong place.
+func storeFailure(err error) error {
+	if errors.Is(err, os.ErrDeadlineExceeded) || errors.Is(err, context.DeadlineExceeded) {
+		return &fetchError{cause: err}
+	}
+	return err
+}
+
+// fetchError keeps the cause out of the message, because a transport error quotes
+// the request URL and a URL may carry credentials. The reasons below are composed by
+// Vapor itself and name no request, so they are worth printing.
 type fetchError struct{ cause error }
 
 func (e *fetchError) Error() string {
+	if reason := safeReason(e.cause); reason != "" {
+		return "download failed: " + reason
+	}
 	return "download failed (details redacted)"
 }
 
 func (e *fetchError) Unwrap() error { return e.cause }
+
+// safeReason names a failure whose text Vapor wrote, and nothing else.
+func safeReason(cause error) string {
+	if refusal, ok := errors.AsType[*redirectRefusal](cause); ok {
+		return refusal.Error()
+	}
+	if status, ok := errors.AsType[*statusError](cause); ok {
+		return fmt.Sprintf("HTTP %d", status.status)
+	}
+	if errors.Is(cause, context.DeadlineExceeded) || errors.Is(cause, os.ErrDeadlineExceeded) {
+		return "timed out"
+	}
+	return ""
+}

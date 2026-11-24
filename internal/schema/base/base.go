@@ -40,6 +40,21 @@ func ValidateInputURL(value string, httpsOnly bool) error {
 	return nil
 }
 
+// ValidateRedirectURL checks a redirect target. A server signs its own asset URL,
+// so a redirect may carry a query where a declared input may not.
+func ValidateRedirectURL(value string) error {
+	u, err := url.Parse(value)
+	if err != nil {
+		return &inputError{message: "redirect target is malformed", cause: err}
+	}
+	if (u.Scheme != "https" && u.Scheme != "http") || u.Hostname() == "" ||
+		u.User != nil || strings.ContainsRune(value, '#') ||
+		u.Opaque != "" || strings.HasSuffix(u.Host, ":") {
+		return errors.New("redirect target is not a credential-free HTTP(S) URL")
+	}
+	return nil
+}
+
 // ValidateLocalPath checks a clean, relative, slash-separated path.
 func ValidateLocalPath(value string) error {
 	if value == "" || strings.TrimSpace(value) != value || path.Clean(value) != value ||

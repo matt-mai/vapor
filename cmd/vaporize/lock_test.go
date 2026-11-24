@@ -69,8 +69,8 @@ func TestFetcherClient_StalledDownloadDoesNotPublish(t *testing.T) {
 			if !errors.Is(err, context.DeadlineExceeded) || ctx.Err() != nil {
 				t.Fatalf("acquire error = %v, context error = %v; want client timeout", err, ctx.Err())
 			}
-			if phase == "body" && !strings.Contains(err.Error(), "write cache blob") {
-				t.Fatalf("timed out before reading the body: %v", err)
+			if phase == "body" && !strings.Contains(err.Error(), "download failed: timed out") {
+				t.Fatalf("stalled body is not named as a download timeout: %v", err)
 			}
 			if store.Has(digest) {
 				t.Fatal("incomplete payload was cached")

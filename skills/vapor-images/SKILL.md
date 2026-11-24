@@ -206,11 +206,9 @@ from `go.dev/dl`), take the artifact directly instead of hunting for a package.
    ```
    A `path` is relative to the directory holding `image.yaml`, uses forward
    slashes, and may not point outside that directory. A `url` may not carry
-   credentials, a query string or a fragment, and a redirect to such a URL is
-   refused, so a `github.com/<owner>/<repo>/releases/download/...` link fails
-   (`download failed (details redacted)`) — its 302 target is signed with a
-   query. Use `path`, or a host that serves the bytes directly, such as
-   `https://releases.astral.sh/github/<owner>/<repo>/releases/download/...`.
+   credentials, a query string or a fragment, but redirects are followed, so a
+   `github.com/<owner>/<repo>/releases/download/...` link works — its 302 target
+   carries the signature in its query, and that is allowed.
    `unpack: true` keeps the archive's own top directory and its modes, so expose
    a versioned binary with `filesystem.paths` symlinks.
 3. **Custom slices** — if no published slice fits, write `slices/<package>.yaml`
@@ -295,8 +293,13 @@ Errors name their cause; fix the spec, never weaken validation:
 - `whole-package/slice overlap is not allowed` → pick one form per package.
 - `no starter template: use --distro ubuntu --release 26.04 or resolute` → only Ubuntu 26.04/resolute has a starter spec; a Debian spec is hand-written.
 - `workdir "/app" does not exist` → declare `/app` as a directory in `filesystem.paths`.
-- `download failed (details redacted)` → the artifact URL redirected to a signed
-  query, or it is otherwise unusable; use `path` or a direct host.
+- `download failed: HTTP 502` → the host or a proxy refused or failed the
+  transfer; retry, or fetch the file another way and use `path`.
+- `download failed: timed out` → the payload stopped arriving, often because a
+  proxy inspects the body before releasing it; retry, or use `path`.
+- `download failed (details redacted)` → the transfer failed for a reason Vapor
+  will not print, because the message would quote the request URL; check the URL
+  with `curl -I` and use `path` if it stays unreachable.
 - `slice <pkg> path <path> is missing from package "<pkg>"` → the slice names a
   file the package does not ship; list the `.deb` and correct the slice.
 - `--oci-dir` refuses an existing path; `--push` requires at least one tag.

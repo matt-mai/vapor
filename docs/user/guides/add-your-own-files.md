@@ -149,10 +149,11 @@ uses forward slashes, and may not point outside that directory.
 
 A `url` is for something you do not want to vendor, such as a published upstream
 release archive. It accepts HTTP or HTTPS and must have a hostname. It cannot
-contain credentials, a query string or a fragment, so a GitHub release asset link
-is refused; use an address that serves the file directly. HTTP is allowed because
-the `sha256` value establishes what the download must contain, but it gives no
-transport privacy. Put the file on an HTTPS server when that matters to you.
+contain credentials, a query string or a fragment. Redirects are followed, so a
+GitHub release asset link works: the address it redirects to may carry a signed
+query. HTTP is allowed because the `sha256` value establishes what the download
+must contain, but it gives no transport privacy. Put the file on an HTTPS server
+when that matters to you.
 
 Either way Vapor reads the file during `lock`, checks the hash and keeps the
 verified bytes in the cache. A build never reads the original file or downloads it

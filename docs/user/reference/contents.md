@@ -266,7 +266,9 @@ satisfies the default and fails `require`. The policy belongs to the repository 
 declare, not to the distribution.
 
 URLs accept HTTP and HTTPS and need a hostname. They cannot contain credentials,
-a query string or a fragment. Catalogue URLs must be HTTPS.
+a query string or a fragment; a redirect target may carry a query. The downloader
+follows exactly one thing: the network path the server names. Redirect targets
+are never written to the lock or the log. Catalogue URLs must be HTTPS.
 
 ## artifacts
 
