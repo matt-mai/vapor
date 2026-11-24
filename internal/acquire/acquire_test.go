@@ -7,10 +7,13 @@ import (
 	"encoding/hex"
 	"errors"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/matt-mai/vapor/internal/acquire"
 	"github.com/matt-mai/vapor/internal/cache"
@@ -199,6 +202,56 @@ func TestPackagesFetchFailureIsRedacted(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "details redacted") {
 		t.Fatalf("error is not safe: %v", err)
+	}
+}
+
+// A failure whose text Vapor composed itself names no request, so it is printed
+// instead of the blanket redaction a transport error needs.
+func TestArtifactFailureNamesASafeCause(t *testing.T) {
+	for _, test := range []struct {
+		status int
+		want   string
+	}{
+		{status: http.StatusBadGateway, want: "download failed: HTTP 502"},
+		{status: http.StatusNotFound, want: "download failed: HTTP 404"},
+	} {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(test.status)
+		}))
+		store, _ := newCache(t)
+		_, err := acquire.Packages(t.Context(), acquire.HTTPFetcher{},
+			store, []acquire.Package{{
+				Platform: "linux/amd64", Name: "pkg", Version: "1.0", Architecture: "amd64",
+				URL: server.URL + "/pkg.deb", SHA256: digestOf([]byte("x")), Size: 1,
+			}}, nil)
+		server.Close()
+		if err == nil || !strings.Contains(err.Error(), test.want) {
+			t.Fatalf("error = %v, want %q", err, test.want)
+		}
+	}
+}
+
+// A payload that stops arriving is a download failure, not a cache failure: the
+// bytes only pass through the cache writer.
+func TestPackagesReportAStalledBodyAsATimeout(t *testing.T) {
+	release := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Length", "16")
+		w.WriteHeader(http.StatusOK)
+		w.(http.Flusher).Flush()
+		<-release
+	}))
+	defer server.Close()
+	defer close(release)
+	store, _ := newCache(t)
+	_, err := acquire.Packages(t.Context(), acquire.HTTPFetcher{
+		Client: &http.Client{Timeout: 50 * time.Millisecond},
+	}, store, []acquire.Package{{
+		Platform: "linux/amd64", Name: "pkg", Version: "1.0", Architecture: "amd64",
+		URL: server.URL + "/pkg.deb", SHA256: digestOf([]byte("x")), Size: 16,
+	}}, nil)
+	if err == nil || !strings.Contains(err.Error(), "download failed: timed out") {
+		t.Fatalf("error = %v", err)
 	}
 }
 

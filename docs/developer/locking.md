@@ -155,7 +155,8 @@ retry cannot weaken the chain: a payload is either the locked bytes or a failure
 ## What the lock deliberately does not hold
 
 - Credentials, private keys, absolute host paths, timestamps and warnings.
-- Redirect targets, since a redirect URL can carry a credential in its query.
+- Redirect targets, since a redirect URL can carry a credential or a signature in
+  its query.
 - Conclusions without their bytes: every claimed hash has a size, and every one of
   those byte strings is in the cache.
 

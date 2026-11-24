@@ -108,6 +108,47 @@ The inputs changed since the lock was written. Review the differences, then lock
 again when the change is expected.
 
 ```text
+vaporize: operation failed: artifact "server" on linux/amd64: download failed: HTTP 502
+```
+
+An artifact download failed. `lock` retries a rate limit, a server error and a
+request that times out before its headers five times over about a minute, so a 502
+that survives those attempts is a refusing host, a proxy in the way or a broken
+mirror. Check the URL with `curl -I` from the same machine, and use `path` with a
+local copy if it stays unreachable.
+
+```text
+vaporize: operation failed: artifact "server" on linux/amd64: download failed: timed out
+```
+
+The payload stopped arriving mid-transfer. A proxy that scans a file before it
+passes it on looks exactly like this: the headers arrive, then nothing until the
+client gives up. `lock` allows one minute for headers and thirty for the whole
+request. A stall while the body is being read is not retried: those bytes were
+already handed to the caller, so a retry would restart a transfer that may be most
+of the way done. Retry the command on a network that bypasses the inspector, or
+declare a `path`.
+
+```text
+vaporize: operation failed: artifact "server" on linux/amd64: download failed (details redacted)
+```
+
+The download failed for a reason Vapor will not repeat, because the message would
+quote the request URL and a URL can carry a credential. Unusable URLs are caught
+before the request, so this is a transport failure: DNS, a refused connection,
+a proxy that resets the connection, or a TLS failure. `curl -v` against the same
+URL on the same machine shows which. Environment variables such as
+`HTTP_PROXY`, `HTTPS_PROXY` and `NO_PROXY` are honored the way Go honors them.
+
+```text
+vaporize: operation failed: artifact "server" on linux/amd64: download failed: redirect target is not a credential-free HTTP(S) URL
+```
+
+The host redirected the download to an address that carries credentials or is not
+HTTP(S), and Vapor refuses to send the request there. Use a URL that serves the
+file directly, or a local `path`.
+
+```text
 vaporize: operation failed: 15 referenced blobs are absent from the cache
 ```
 

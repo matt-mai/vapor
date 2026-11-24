@@ -72,8 +72,8 @@ The conventions below apply to every record, so they are stated once.
   repository-relative POSIX paths with no `..`, no backslash and no leading slash.
   An artifact `dest` stays an absolute in-image path.
 - URLs are the declared, credential-free HTTP(S) URLs. Catalogue URLs are HTTPS.
-  Redirect targets are never recorded because they can carry credentials in their
-  query string.
+  Redirect targets are never recorded: a signed target carries its signature in the
+  query, and a target is never part of what the lock names.
 - Nothing records credentials, private keys, absolute host paths, wall-clock
   timestamps, warnings, or progress and timing state.
 

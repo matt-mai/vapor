@@ -186,7 +186,9 @@ During `lock`, each archive or artifact HTTP attempt allows one minute for the
 response headers and 30 minutes for the whole request, including the body. The
 longer limit leaves time to download a payload up to the 2 GiB size limit. An
 attempt can be retried if it times out before the body is handed to the caller.
-A timeout while reading the body fails the download without caching partial data.
+A timeout while reading the body fails the download without caching partial data, and
+is reported as `download failed: timed out` rather than as a cache write error: the
+bytes only pass through the cache writer, they do not come from it.
 
 Jitter spreads out retries when several clients hit the same outage.
 
@@ -196,9 +198,14 @@ server's own number is what makes a rate limit work: guessing shorter lands insi
 window and gets refused again.
 
 What is **not** retried is a conclusion rather than a hiccup: a 404 or 403, a refused
-cross-origin redirect, or a cancelled context. A missing file stays missing, and a
-redirect the fetcher refuses would be refused again — asking twice only delays the
-error the user needs to see.
+redirect, or a cancelled context. A missing file stays missing, and a redirect the
+fetcher refuses would be refused again — asking twice only delays the error the user
+needs to see.
+
+A declared URL carries no query, but a redirect may: a server that signs its own
+asset URLs, like GitHub's release assets, puts the signature in the query of the
+302 target. So a redirect is checked for credentials, scheme and host rather than
+for a query, and its target is never recorded or printed.
 
 The failure a user sees names the repository, the file and the status:
 
@@ -207,7 +214,10 @@ repository "ubuntu": archive request for "dists/nonexistent/InRelease" failed: H
 ```
 
 Neither the archive URL (it may carry credentials) nor the transport's own text (it
-may quote them) appears in the message.
+may quote them) appears in the message. An artifact download is stricter, because a
+transport error quotes the request: its failure says `download failed` and adds the
+reason only when Vapor composed that reason itself — a refused redirect, an HTTP
+status or a timeout.
 
 ## Replaying evidence offline
 

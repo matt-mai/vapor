@@ -147,13 +147,11 @@ Rules that bite:
   hex characters. Sources must cover every platform in `platforms`.
 - `sbom.name` and `sbom.version` are both required and both non-empty.
 - `url` must be plain `http(s)://host/path`: no credentials, no query string, no
-  fragment. Redirects are followed (up to five, each re-checked for credentials),
-  so **a host that 302s to a signed URL fails**: `github.com/<owner>/<repo>/
-  releases/download/...` redirects to `release-assets.githubusercontent.com` with
-  a signed query and fails with `download failed (details redacted)`. Astral's
-  mirror `https://releases.astral.sh/github/<owner>/<repo>/releases/download/...`
-  serves a query-free 302 and works. When a project publishes no such mirror, use
-  `path` with the file stored beside the spec.
+  fragment. Redirects are followed (up to five), and a target may carry a query,
+  so `github.com/<owner>/<repo>/releases/download/...` works: it redirects to
+  `release-assets.githubusercontent.com` with a signed query. A target that adds
+  credentials or leaves HTTP(S) is refused and reports `download failed` with no
+  further detail.
 - `unpack: true` re-roots the archive under `dest` and keeps the archive's own
   modes and uid/gid. Archives may be gzip, zstd or xz. Contents cannot escape
   `dest`. A tarball with a versioned top directory keeps it, so expose binaries
