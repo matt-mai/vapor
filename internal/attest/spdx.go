@@ -4,6 +4,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/matt-mai/vapor/internal/schema/contents"
 )
 
 // SPDX document values. A document describes one platform image, so the namespace is
@@ -250,12 +252,14 @@ func declaredCPE(declared, version string) string {
 	if declared == "" {
 		return ""
 	}
-	fields := strings.Split(declared, ":")
+	fields := contents.SplitCPE(declared)
 	const versionField = 5
 	if len(fields) != 13 || fields[versionField] != "*" || version == "" {
 		return declared
 	}
-	fields[versionField] = version
+	// A Debian version carries an epoch, and a colon in a field would read as a field
+	// separator, so the version is escaped rather than pasted in.
+	fields[versionField] = contents.EscapeCPEField(version)
 	return strings.Join(fields, ":")
 }
 
