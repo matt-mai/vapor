@@ -7,6 +7,7 @@ import (
 	"github.com/matt-mai/vapor/internal/distro/deb"
 	"github.com/matt-mai/vapor/internal/distro/debian"
 	"github.com/matt-mai/vapor/internal/distro/ubuntu"
+	"github.com/matt-mai/vapor/internal/synthesis"
 )
 
 // Provider is the distribution policy for one image release.
@@ -45,6 +46,10 @@ type Provider interface {
 	// ProTrust returns reviewed key snapshots for a Pro service when its archive
 	// has no explicit trust. Explicit trust replaces them; it never merges.
 	ProTrust(service string) []deb.KeySnapshot
+	// BaseAccountMasters returns the files the distribution's packages ship in place
+	// of a populated account database. Synthesis merges them into whatever the image
+	// already has, so the paths are policy and live here rather than in synthesis.
+	BaseAccountMasters() synthesis.BaseAccountMasters
 	// CABundlePath returns where the provider's images keep the public certificate
 	// bundle. Synthesis takes the location as an argument so no distribution path
 	// is hardcoded outside provider policy.

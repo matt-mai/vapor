@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/matt-mai/vapor/internal/distro/deb"
+	"github.com/matt-mai/vapor/internal/synthesis"
 )
 
 const (
@@ -45,6 +46,15 @@ func (p *Provider) Distro() string { return distroName }
 
 // Release implements distro.Provider.
 func (p *Provider) Release() string { return p.release }
+
+// BaseAccountMasters implements distro.Provider. Ubuntu inherits Debian's base-passwd
+// layout.
+func (p *Provider) BaseAccountMasters() synthesis.BaseAccountMasters {
+	return synthesis.BaseAccountMasters{ //nolint:gosec // file paths, not credentials
+		Passwd: "/usr/share/base-passwd/passwd.master",
+		Group:  "/usr/share/base-passwd/group.master",
+	}
+}
 
 // CABundlePath implements distro.Provider. Ubuntu's ca-certificates package
 // installs the bundle here and both /etc/ssl/certs and /usr/lib/ssl link to it.

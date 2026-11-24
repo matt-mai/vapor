@@ -97,14 +97,12 @@ func (i *Input) maxSteps() int {
 // identity, the trust bundle and the package database.
 func (i *Input) synthesize(ctx context.Context, tree *vfs.Tree, content *Content, platform string) error {
 	declared := &i.spec.Filesystem
-	if err := synthesis.Accounts(tree, &declared.Accounts); err != nil {
+	// Every account comes from one staged pass: a declared user may need a group the
+	// distribution's masters supply, and a master user may need a group the
+	// declaration supplies.
+	if err := synthesis.ApplyAccounts(tree, &declared.Accounts, content.Packages,
+		i.provider.BaseAccountMasters()); err != nil {
 		return fmt.Errorf("accounts: %w", err)
-	}
-	if err := synthesis.SandboxAccount(tree, content.Packages); err != nil {
-		return fmt.Errorf("apt sandbox account: %w", err)
-	}
-	if err := synthesis.BaseAccounts(tree); err != nil {
-		return fmt.Errorf("base accounts: %w", err)
 	}
 	if err := synthesis.Timezone(tree, declared.Timezone); err != nil {
 		return fmt.Errorf("timezone: %w", err)

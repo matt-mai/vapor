@@ -2,82 +2,184 @@ package synthesis
 
 import (
 	"errors"
+	"fmt"
+	"slices"
+	"strconv"
 
+	"github.com/matt-mai/vapor/internal/schema/filesystem"
 	"github.com/matt-mai/vapor/internal/vfs"
-)
-
-// The master files base-passwd ships in place of a populated account database.
-const (
-	BasePasswdMasterPath = "/usr/share/base-passwd/passwd.master" //nolint:gosec // a file path, not a credential
-	BaseGroupMasterPath  = "/usr/share/base-passwd/group.master"
 )
 
 // rootName is the account uid 0 and gid 0 are spelled as. Both databases use it, so it
 // is a constant rather than five literals.
 const rootName = "root"
 
-// BaseAccounts gives an image the standard accounts its packages expect.
+// BaseAccountMasters are the files a distribution's packages ship in place of a
+// populated account database. An empty field means the distribution ships none, and
+// the image gains uid 0's two records alone.
+type BaseAccountMasters struct {
+	Passwd string
+	Group  string
+}
+
+// ApplyAccounts writes every account an image needs, in the order that lets each one
+// resolve, and stages the result so a failure leaves the tree untouched.
 //
-// Debian and Ubuntu generate /etc/passwd and /etc/group from these masters in a
-// maintainer script, which a build never runs, so an image names only what it
-// declares. Package tooling then fails on the names it expects to resolve: apt cannot
-// chown its download directories to root and falls back to fetching as root, and a
-// script calling `chown root:root` reports an unknown group.
+// Debian and Ubuntu generate /etc/passwd and /etc/group from the master files their
+// base-passwd package ships, in a maintainer script a build never runs, so an image
+// would otherwise name only what it declares. Package tooling then fails on the names
+// it expects to resolve: apt cannot chown its download directories to root and falls
+// back to fetching as root, and a script calling `chown root:root` reports an unknown
+// group.
 //
-// The records come from the masters the image's own package ships, so a release that
-// changes them changes the image. An image without base-passwd gains uid 0's two
-// records, because a container has a superuser whether its account database names one
-// or not.
+// A distribution account is a convenience, so it never displaces one the image already
+// has: a taken name or id keeps its record, even when the other half of the pair is
+// free. An image that carries no account data at all gains none, so an image built to
+// hold a static binary keeps its empty root filesystem.
 //
-// A base account is a convenience, so it never displaces one the image already has: a
-// taken name or id keeps its record, even when the other half of the pair is free.
-// An image that carries no account data at all gains none, so an image built to hold a
-// static binary keeps its empty root filesystem.
-func BaseAccounts(tree *vfs.Tree) error {
+// The order is what makes each record resolve. The distribution's groups go in first so
+// a declared group keeps its name and id; declared users follow, because a declaration
+// may name a group either source supplied; the apt sandbox account comes next, since it
+// joins whatever group owns its gid; and the distribution's users come last, admitted
+// only against the group set the earlier passes produced.
+func ApplyAccounts(tree *vfs.Tree, declared *filesystem.Accounts, packages []PackageState,
+	masters BaseAccountMasters,
+) error {
 	if tree == nil {
-		return errors.New("base account synthesis requires an image tree")
+		return errors.New("account synthesis requires an image tree")
 	}
-	if !carriesAccounts(tree) {
-		return nil
-	}
-	// Accounts are staged on a copy so a failure on one database cannot leave the
-	// other half of the pair written.
 	staged := tree.Clone()
-	// Groups first: a passwd record's primary group has to resolve.
-	if _, err := addBaseAccounts(staged, BaseGroupMasterPath, groupFile, rootGroup()); err != nil {
+	// Decided once, before any pass writes a file: a later pass must not see the
+	// databases an earlier one created and mistake them for the image's own account
+	// data. An image apt fetches in counts, because the sandbox account is about to give
+	// it a database either way.
+	carries := carriesAccounts(staged, masters) || aptFetches(staged, packages)
+	if err := addMasters(staged, masters.Group, groupFile, rootGroup(), nil, carries); err != nil {
 		return err
 	}
-	added, err := addBaseAccounts(staged, BasePasswdMasterPath, passwdFile, rootUser())
+	accounts := filesystem.Accounts{}
+	if declared != nil {
+		accounts = *declared
+	}
+	if err := applyGroups(staged, accounts.Groups); err != nil {
+		return err
+	}
+	if err := applyUsers(staged, accounts.Users); err != nil {
+		return err
+	}
+	if err := SandboxAccount(staged, packages); err != nil {
+		return err
+	}
+	groups, err := newAccountDatabaseFrom(staged, groupFile)
 	if err != nil {
 		return err
 	}
-	if err := keepShadowInStep(staged, added); err != nil {
+	if err := addMasters(staged, masters.Passwd, passwdFile, rootUser(), groups, carries); err != nil {
 		return err
 	}
 	return tree.Replace(staged)
 }
 
-// addBaseAccounts merges one master file into the database it belongs to, falling back
-// to a single record when the image ships no master. It returns the names it added.
-func addBaseAccounts(tree *vfs.Tree, master string, kind accountDatabaseFile, fallback databaseRecord) ([]string, error) {
+// addMasters merges one master file into the database it belongs to, falling back to a
+// single record when the image ships no master. A user is the only record with a shadow
+// counterpart, so a passwd merge keeps `/etc/shadow` in step as it goes.
+func addMasters(tree *vfs.Tree, master string, kind accountDatabaseFile, fallback databaseRecord,
+	groups *accountDatabase, carries bool,
+) error {
+	if !carries {
+		return nil
+	}
 	records, err := readDatabase(tree, kind.withLocation(master))
 	if err != nil {
-		return nil, err
+		return err
 	}
-	if len(records) == 0 {
-		records = database{fallback}
+	if !hasAccountRecords(records) {
+		records = append(records, fallback)
 	}
 	merged, err := newAccountDatabaseFrom(tree, kind)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	var added []string
-	for _, record := range records {
-		if merged.addIfFree(record) {
-			added = append(added, record.name)
+	added, err := mergeMaster(merged, records, master, groups)
+	if err != nil {
+		return err
+	}
+	if len(added) == 0 {
+		// Every record already had a name or an id, so the file is as it was.
+		// Rewriting it would detach a hard link and reflow a shape nothing asked to
+		// change.
+		return nil
+	}
+	if kind.location == PasswdPath {
+		if err := keepShadowInStep(tree, added); err != nil {
+			return err
 		}
 	}
-	return added, writeDatabase(tree, kind, merged.records)
+	return writeDatabase(tree, kind, merged.records)
+}
+
+// mergeMaster adds the records whose names and ids are free and reports their names,
+// which are how a caller tells an unchanged file from a rewritten one.
+func mergeMaster(merged *accountDatabase, records database, master string,
+	groups *accountDatabase,
+) ([]string, error) {
+	var added []string
+	for _, record := range records {
+		if record.fields == nil {
+			// A comment or blank line is not an account, so it neither needs a free
+			// name nor may hold one: it is carried over as the file had it.
+			merged.records = append(merged.records, record)
+			continue
+		}
+		if !merged.free(record) {
+			// The image's own record wins, and an account that is already there is
+			// not this pass's to inspect.
+			continue
+		}
+		if !passwdDelegates(record) {
+			return nil, fmt.Errorf("base account %q in %s is not disabled; its password field must be %q",
+				record.name, master, DisabledPassword)
+		}
+		admitted, err := primaryGroupResolves(master, record, groups)
+		if err != nil {
+			return nil, err
+		}
+		if !admitted {
+			continue
+		}
+		merged.add(record)
+		added = append(added, record.name)
+	}
+	return added, nil
+}
+
+// primaryGroupResolves reports whether a passwd record may join the database: with no
+// group database it always may, and with one its primary group must be defined there.
+// The id may have gone to another account, and a passwd record naming a group the image
+// does not define is worse than no record at all.
+func primaryGroupResolves(master string, record databaseRecord, groups *accountDatabase) (bool, error) {
+	if groups == nil {
+		return true, nil
+	}
+	gid, err := primaryGID(master, record)
+	if err != nil {
+		return false, err
+	}
+	_, defined := groups.byID[gid]
+	return defined, nil
+}
+
+// primaryGID reads the group a passwd record names as its primary group.
+func primaryGID(master string, record databaseRecord) (uint32, error) {
+	const gidField = 3
+	if len(record.fields) <= gidField {
+		return 0, fmt.Errorf("%s record %q is missing its primary group", master, record.name)
+	}
+	gid, err := strconv.ParseUint(record.fields[gidField], 10, 32)
+	if err != nil {
+		return 0, fmt.Errorf("%s record %q has a non-numeric primary group", master, record.name)
+	}
+	return uint32(gid), nil
 }
 
 // keepShadowInStep gives an added account a disabled shadow record when the image
@@ -114,8 +216,11 @@ func (f accountDatabaseFile) withLocation(location string) accountDatabaseFile {
 // carriesAccounts reports whether the image has account data at all. An image with
 // neither a database nor a master file was built to hold no accounts, and giving one a
 // database would add state nothing asked for.
-func carriesAccounts(tree *vfs.Tree) bool {
-	for _, location := range []string{PasswdPath, GroupPath, BasePasswdMasterPath, BaseGroupMasterPath} {
+func carriesAccounts(tree *vfs.Tree, masters BaseAccountMasters) bool {
+	for _, location := range []string{PasswdPath, GroupPath, masters.Passwd, masters.Group} {
+		if location == "" {
+			continue
+		}
 		if _, ok := tree.Lookup(location); ok {
 			return true
 		}
@@ -123,18 +228,25 @@ func carriesAccounts(tree *vfs.Tree) bool {
 	return false
 }
 
-// addIfFree appends a record when neither its name nor its id is taken, and reports
-// whether it did.
-func (d *accountDatabase) addIfFree(record databaseRecord) bool {
+// hasAccountRecords reports whether a database holds a real account, as opposed to the
+// comments and blank lines a master may consist of.
+func hasAccountRecords(records database) bool {
+	return slices.ContainsFunc(records, func(record databaseRecord) bool { return record.fields != nil })
+}
+
+// free reports whether neither the record's name nor its id is taken.
+func (d *accountDatabase) free(record databaseRecord) bool {
 	if _, taken := d.byName[record.name]; taken {
 		return false
 	}
-	if _, taken := d.byID[record.id]; taken {
-		return false
-	}
+	_, taken := d.byID[record.id]
+	return !taken
+}
+
+// add appends a record whose name and id are free.
+func (d *accountDatabase) add(record databaseRecord) {
 	d.records = append(d.records, record)
 	d.byName[record.name], d.byID[record.id] = record, record
-	return true
 }
 
 // rootUser and rootGroup are what an image without base-passwd gains for uid 0, spelled
