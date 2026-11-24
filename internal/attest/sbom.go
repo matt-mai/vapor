@@ -20,6 +20,9 @@ type SBOMInput struct {
 	Subject  string
 	Distro   string
 	Release  string
+	// Repositories are the platform's locked repositories, which say which of them
+	// authenticate their own identity and so publish under the vendor's name.
+	Repositories []lock.Repository
 
 	Packages  []lock.Package
 	Slices    []lock.Slice

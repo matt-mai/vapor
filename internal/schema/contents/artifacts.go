@@ -16,22 +16,32 @@ import (
 // a field count is what tells whole from truncated. An empty value is allowed: a payload
 // whose advisories are filed under a purl needs none.
 func ValidateCPE(value string) error {
+	return validateCPENamed(value, "artifact sbom cpe")
+}
+
+// ValidateDeclaredCPE checks the CPE a package or slice request declares, which is the
+// advisory database's name for a package its own index files none under.
+func ValidateDeclaredCPE(value string) error {
+	return validateCPENamed(value, "cpe")
+}
+
+func validateCPENamed(value, field string) error {
 	if value == "" {
 		return nil
 	}
 	if strings.ContainsAny(value, " \t\r\n") {
-		return errors.New("artifact sbom cpe must be a CPE 2.3 name without whitespace")
+		return fmt.Errorf("%s must be a CPE 2.3 name without whitespace", field)
 	}
 	fields := strings.Split(value, ":")
 	if len(fields) != 13 || fields[0] != "cpe" || fields[1] != "2.3" {
-		return errors.New("artifact sbom cpe must be a CPE 2.3 name such as " +
-			"cpe:2.3:a:vendor:product:version:*:*:*:*:*:*:*")
+		return fmt.Errorf("%s must be a CPE 2.3 name such as "+
+			"cpe:2.3:a:vendor:product:version:*:*:*:*:*:*:*", field)
 	}
 	if part := fields[2]; part != "a" && part != "o" && part != "h" {
-		return errors.New("artifact sbom cpe part must be a, o or h")
+		return fmt.Errorf("%s part must be a, o or h", field)
 	}
 	if fields[3] == "" || fields[4] == "" || fields[3] == "*" || fields[4] == "*" {
-		return errors.New("artifact sbom cpe must name a product, which wildcards cannot")
+		return fmt.Errorf("%s must name a product, which wildcards cannot", field)
 	}
 	return nil
 }

@@ -19,10 +19,14 @@ func resolveWholePackages(specification *spec.Spec, archives map[string]*archive
 	}
 	roots := make([]string, 0, len(specification.Contents.Packages))
 	pins := make(map[string]string, len(specification.Contents.Packages))
+	cpes := make(map[string]string, len(specification.Contents.Packages))
 	for _, request := range specification.Contents.Packages {
 		roots = append(roots, request.Name)
 		if request.Version != nil {
 			pins[request.Name] = *request.Version
+		}
+		if request.CPE != "" {
+			cpes[request.Name] = request.CPE
 		}
 	}
 	var result []lock.Package
@@ -36,7 +40,7 @@ func resolveWholePackages(specification *spec.Spec, archives map[string]*archive
 			result = append(result, lock.Package{
 				Platform: platform, Name: candidate.Name, Version: candidate.Version,
 				Architecture: candidate.Architecture, Source: candidate.Source,
-				Repository: candidate.Repository,
+				Repository: candidate.Repository, CPE: cpes[candidate.Name],
 				Content: lock.Content{
 					Path: candidate.Filename, SHA256: candidate.SHA256, Size: candidate.Size,
 				},

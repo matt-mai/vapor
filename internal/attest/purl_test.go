@@ -6,6 +6,8 @@ import (
 
 	"github.com/matt-mai/vapor/internal/attest"
 	"github.com/matt-mai/vapor/internal/schema/attestation"
+	"github.com/matt-mai/vapor/internal/schema/contents"
+	"github.com/matt-mai/vapor/internal/schema/lock"
 )
 
 // TestPackageURL_IsTheSameEverywhere checks the one identity both payloads use, including
@@ -119,6 +121,51 @@ func TestImportClaims_MatchesQualifiers(t *testing.T) {
 		}
 		if !testCase.matched && err == nil {
 			t.Fatalf("%s was accepted", name)
+		}
+	}
+}
+
+// TestPackageURL_NamesTheVendorForItsOwnRepository checks the routing a scanner needs:
+// a package from a repository that authenticates its own release identity is the
+// vendor's, not the distribution's, so the distribution's advisories for the name are
+// not read against it. Ubuntu publishes no version range for nodejs, so a nodejs purl
+// in Ubuntu's namespace matches every version of it whatever the image holds.
+func TestPackageURL_NamesTheVendorForItsOwnRepository(t *testing.T) {
+	input, _ := newSBOMFixture()
+	input.Repositories = []lock.Repository{
+		{ID: "sha256:" + strings.Repeat("1", 64), Name: "ubuntu", Platform: "linux/amd64",
+			Suite: "resolute"},
+		{ID: "sha256:" + strings.Repeat("2", 64), Name: "nodesource",
+			Platform: "linux/amd64", Suite: "nodistro",
+			Identity: contents.RepositoryIdentityOwn},
+	}
+	input.Packages[0].Repository = "sha256:" + strings.Repeat("2", 64)
+	payload, err := attest.SPDX(input)
+	if err != nil {
+		t.Fatalf("SPDX: %v", err)
+	}
+	locator := packageNamed(t, decodeSBOM(t, payload), "coreutils").ExternalRefs[0].ReferenceLocator
+	for _, want := range []string{"pkg:deb/nodesource/coreutils@", "distro=nodesource-nodistro"} {
+		if !strings.Contains(locator, want) {
+			t.Fatalf("locator = %q, want %s", locator, want)
+		}
+	}
+
+	input, _ = newSBOMFixture()
+	input.Repositories = []lock.Repository{{ID: "sha256:" + strings.Repeat("1", 64),
+		Name: "ubuntu", Platform: "linux/amd64", Suite: "resolute"}}
+	input.Packages[0].Repository = "sha256:" + strings.Repeat("1", 64)
+	payload, err = attest.SPDX(input)
+	if err != nil {
+		t.Fatalf("SPDX: %v", err)
+	}
+	locator = packageNamed(t, decodeSBOM(t, payload), "coreutils").ExternalRefs[0].ReferenceLocator
+	if want := "pkg:deb/ubuntu/coreutils@"; !strings.Contains(locator, want) {
+		t.Fatalf("locator = %q, want %s", locator, want)
+	}
+	for _, unwanted := range []string{"distro=ubuntu-nodistro", "distro=ubuntu-resolute"} {
+		if strings.Contains(locator, unwanted) {
+			t.Fatalf("locator = %q, carries %s", locator, unwanted)
 		}
 	}
 }

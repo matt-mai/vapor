@@ -11,15 +11,23 @@ import (
 // content, never the mirror it was read from. The upstream qualifier is the source
 // package the archive was built from: advisories are published per source package, so
 // without it a scanner reads a library under a name no advisory mentions.
-func packageURL(distro, release, name, version, arch, upstream string) string {
+//
+// The vendor is the namespace, and it is the distribution only for that distribution's
+// own archive. A repository that authenticates its own release identity publishes
+// packages the base distribution never built, so they carry the vendor's namespace and
+// the vendor's release. Naming the base distribution instead would hand a scanner a
+// package it believes Ubuntu ships, and Ubuntu's advisories for that name describe its
+// own build of it: every version matches them, because Canonical records no version
+// range for a package it no longer maintains.
+func packageURL(vendor, release, name, version, arch, upstream string) string {
 	locator := "pkg:deb/"
-	if distro != "" {
-		locator += purlEscape(distro) + "/"
+	if vendor != "" {
+		locator += purlEscape(vendor) + "/"
 	}
 	locator += purlEscape(name) + "@" + purlEscape(version)
 	locator += "?arch=" + purlEscape(arch)
-	if distro != "" && release != "" {
-		locator += "&distro=" + purlEscape(distro+"-"+release)
+	if vendor != "" && release != "" {
+		locator += "&distro=" + purlEscape(vendor+"-"+release)
 	}
 	if upstream != "" && upstream != name {
 		locator += "&upstream=" + purlEscape(upstream)

@@ -106,6 +106,7 @@ catalogues:
 slices:
   - {package: libc6, slice: libs}
   - {catalogue: trixie, package: libc6, slice: libs, version: "= 2.41-12"}
+  - {package: nodejs, slice: runtime, version: "~> 26.0", cpe: "cpe:2.3:a:nodejs:node.js:*:*:*:*:*:*:*:*"}
 packages:
   - busybox-static
   - {name: openssl, version: "~> 3.5"}    # the 3.x line, but not 4.0
@@ -119,6 +120,11 @@ packages:
   `= 3.5.1` any build of 3.5.1, `~> 3.5` the 3.x line, `>= 1.4, < 1.5` a window.
   A bare `version: "3.5.1-1"` is refused with the suggested spelling.
 - Essential slices are resolved for you — never list them yourself.
+- `cpe` is the advisory database's name for a package a vendor build publishes and its
+  own index files no advisories for; it is written beside the purl in the SPDX
+  document. A `*` version inherits the locked one. Every request for one package has
+  to declare the same `cpe`. grype consults a CPE for a Debian package only with
+  `match.dpkg.using-cpes: true`, so declare one only where the purl reaches nothing.
 
 ### artifacts
 

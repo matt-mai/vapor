@@ -376,6 +376,11 @@ func newRepository(request *Request, binding *slicespkg.Binding, suite string) (
 		catalogue: binding.Catalogue, components: slices.Clone(binding.Archive.Components),
 		byHash: byHash, restricted: binding.Archive.Pro != "", scope: slices.Clone(binding.Packages),
 	}
+	if binding.OwnIdentity {
+		// Recorded so a reader of the lock alone knows these packages are the vendor's,
+		// which is what decides the identity they are published under.
+		state.record.Identity = contents.RepositoryIdentityOwn
+	}
 	keys, err := repositoryTrust(request, binding)
 	if err != nil {
 		return nil, err

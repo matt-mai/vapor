@@ -78,6 +78,16 @@ name is the source name. Distribution advisories are published per source packag
 a scanner that only sees the binary name under-reports: `libssl3t64` is fixed in
 `openssl`, and without the qualifier the two cannot be joined.
 
+The namespace and the `distro` qualifier name the vendor that built the package, which
+is the distribution only for the distribution's own archive. A repository that
+authenticates its own release identity publishes packages the distribution never built,
+so a `nodejs` from a vendor suite becomes
+`pkg:deb/nodesource/nodejs@26.13.1-1nodesource1?arch=amd64&distro=nodesource-nodistro`
+rather than an `ubuntu` package. The distinction decides which advisory data a scanner
+applies, and Ubuntu's records for a name it no longer maintains carry no version range
+at all: every version matches them, so an `ubuntu` purl for a vendor build reports the
+distribution's whole history against it and none of the vendor's own fixes.
+
 `fileName` in the file section is a path relative to the image root, as SPDX 2.3
 section 8.1 requires: `/usr/bin/coreutils` is written `usr/bin/coreutils`. Lines and
 relationships still address the file by its absolute path, because that is what the
@@ -101,6 +111,20 @@ the same bytes fetched from two endpoints produce the same element. When the
 specification declares a CPE it is written beside the purl as a `SECURITY`/`cpe23Type`
 reference, because no advisory database indexes a `pkg:generic` URL: without the CPE a
 payload that is not a package is invisible to a scan.
+
+A package element takes a declared CPE the same way. A vendor build is published under
+the vendor's own package URL, which routes a scanner to the vendor's advisories and, for
+a vendor that files none, to no advisories at all. The CPE names the package in a
+database that does index it, so a package whose own index is silent can still be
+matched. One element carries both references, and a scanner that consults CPEs reads
+them together rather than choosing between them.
+
+The two references have to agree on the version. The purl carries the vendor's version
+including its Debian revision (`26.13.1-1nodesource1`), and an ecosystem-aware scanner
+compares a CPE against it with the distribution's version rules, so the revision is read
+as newer than the upstream `26.13.1` and a fixed release reports nothing. A version
+typed out in the CPE itself is not rewritten: declare `*` and let the lock's version
+supply it.
 
 ### Vendored modules
 

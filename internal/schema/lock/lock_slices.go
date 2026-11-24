@@ -21,6 +21,7 @@ type sliceExpectation struct {
 	names     []string
 	catalogue string
 	version   string
+	cpe       string
 }
 
 func verifyLockSlices(spec *schemaSpec.Spec, lock *Lockfile, repositories map[string]*Repository,
@@ -65,9 +66,8 @@ func verifyLockSlice(slice *Slice, spec *schemaSpec.Spec, declaredCatalogues map
 	if slice.Architecture != architectureAll && slice.Architecture != native {
 		return lockSliceKey{}, fmt.Errorf("lock slices[%d]: architecture is not all or native", i)
 	}
-	version := slice.Version
-	if err := base.ValidatePackageVersion(slice.Package, &version); err != nil {
-		return lockSliceKey{}, fmt.Errorf("lock slices[%d]: %w", i, err)
+	if err := verifyLockSliceRecord(slice, i); err != nil {
+		return lockSliceKey{}, err
 	}
 	if err := verifySliceCatalogue(slice, declaredCatalogues, catalogues, repositories, provider, i); err != nil {
 		return lockSliceKey{}, err
@@ -76,22 +76,35 @@ func verifyLockSlice(slice *Slice, spec *schemaSpec.Spec, declaredCatalogues map
 		fmt.Sprintf("lock slices[%d]", i)); err != nil {
 		return lockSliceKey{}, err
 	}
-	if err := verifyLockContent("slice", slice.Content); err != nil {
-		return lockSliceKey{}, fmt.Errorf("lock slices[%d]: %w", i, err)
-	}
-	if err := verifyLocksource(slice.Source, fmt.Sprintf("lock slices[%d]", i)); err != nil {
-		return lockSliceKey{}, err
-	}
-	if err := verifyLockSliceNames(slice.Selected, slice.Closure); err != nil {
-		return lockSliceKey{}, fmt.Errorf("lock slices[%d]: %w", i, err)
-	}
-	if err := checkLockDerived("lock slice definition digest", slice.DefinitionDigest); err != nil {
-		return lockSliceKey{}, fmt.Errorf("lock slices[%d]: %w", i, err)
-	}
 	if err := verifySliceExpectation(slice, expected, i); err != nil {
 		return lockSliceKey{}, err
 	}
 	return lockSliceKey{platform: slice.Platform, pkg: slice.Package}, nil
+}
+
+// verifyLockSliceRecord checks what a slice record must state on its own, before anything
+// about the specification it was locked from is considered.
+func verifyLockSliceRecord(slice *Slice, i int) error {
+	version := slice.Version
+	if err := base.ValidatePackageVersion(slice.Package, &version); err != nil {
+		return fmt.Errorf("lock slices[%d]: %w", i, err)
+	}
+	if err := verifyLockContent("slice", slice.Content); err != nil {
+		return fmt.Errorf("lock slices[%d]: %w", i, err)
+	}
+	if err := verifyLocksource(slice.Source, fmt.Sprintf("lock slices[%d]", i)); err != nil {
+		return err
+	}
+	if err := contents.ValidateDeclaredCPE(slice.CPE); err != nil {
+		return fmt.Errorf("lock slices[%d]: %w", i, err)
+	}
+	if err := verifyLockSliceNames(slice.Selected, slice.Closure); err != nil {
+		return fmt.Errorf("lock slices[%d]: %w", i, err)
+	}
+	if err := checkLockDerived("lock slice definition digest", slice.DefinitionDigest); err != nil {
+		return fmt.Errorf("lock slices[%d]: %w", i, err)
+	}
+	return nil
 }
 
 func verifySliceCatalogue(slice *Slice, declaredCatalogues map[string]contents.CatalogueSource,
@@ -189,6 +202,9 @@ func verifySliceExpectation(slice *Slice, expected map[string]sliceExpectation, 
 	if slice.Catalogue != want.catalogue || !slices.Equal(slice.Selected, want.names) {
 		return fmt.Errorf("lock slices[%d]: selected definitions do not match the spec requests", i)
 	}
+	if slice.CPE != want.cpe {
+		return fmt.Errorf("lock slices[%d]: cpe does not match the specification", i)
+	}
 	return nil
 }
 
@@ -212,22 +228,41 @@ func verifyLockSliceRequests(spec *schemaSpec.Spec, expected map[string]sliceExp
 func sliceExpectations(spec *schemaSpec.Spec) (map[string]sliceExpectation, error) {
 	expected := make(map[string]sliceExpectation)
 	for _, request := range spec.Contents.Slices {
-		if request.Catalogue == nil {
-			return nil, errors.New("lock slices: spec slice request has no catalogue")
-		}
-		want, ok := expected[request.Package]
-		if !ok {
-			want = sliceExpectation{catalogue: *request.Catalogue}
-		} else if want.catalogue != *request.Catalogue {
-			return nil, errors.New("lock slices: requests for one package use multiple catalogues")
-		}
-		want.names = append(want.names, request.Slice)
-		if request.Version != nil {
-			want.version = deb.JoinExpressions(want.version, *request.Version)
+		want, seen := expected[request.Package]
+		want, err := mergeSliceExpectation(want, request, seen)
+		if err != nil {
+			return nil, err
 		}
 		expected[request.Package] = want
 	}
 	return expected, nil
+}
+
+// mergeSliceExpectation folds one slice request into what the package's earlier requests
+// already asked for. Two requests for one package have to agree on the catalogue and the
+// declared CPE, because one package is one element in the document.
+func mergeSliceExpectation(want sliceExpectation, request contents.SliceRequest,
+	seen bool) (sliceExpectation, error) {
+	if request.Catalogue == nil {
+		return want, errors.New("lock slices: spec slice request has no catalogue")
+	}
+	if !seen {
+		want = sliceExpectation{catalogue: *request.Catalogue}
+	} else if want.catalogue != *request.Catalogue {
+		return want, errors.New("lock slices: requests for one package use multiple catalogues")
+	}
+	want.names = append(want.names, request.Slice)
+	if request.Version != nil {
+		want.version = deb.JoinExpressions(want.version, *request.Version)
+	}
+	if request.CPE != "" {
+		if want.cpe != "" && want.cpe != request.CPE {
+			return want, fmt.Errorf("lock slices: requests for %q declare different CPEs",
+				request.Package)
+		}
+		want.cpe = request.CPE
+	}
+	return want, nil
 }
 
 func verifyLockSliceNames(selected, closure []string) error {

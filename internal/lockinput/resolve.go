@@ -44,7 +44,7 @@ func ResolveSelection(ctx context.Context, request *Request) (*locking.Evidence,
 	if err != nil {
 		return nil, err
 	}
-	if evidence.Slices, err = lockSlices(selections, archives); err != nil {
+	if evidence.Slices, err = lockSlices(selections, archives, specCPEs(request.Spec)); err != nil {
 		return nil, err
 	}
 	evidence.Repositories = referencedRepositories(repositories, evidence)

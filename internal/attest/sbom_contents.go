@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/matt-mai/vapor/internal/schema/contents"
 	"github.com/matt-mai/vapor/internal/schema/lock"
 	"github.com/matt-mai/vapor/internal/vfs"
 )
@@ -36,12 +37,17 @@ type element struct {
 	// slices is the dependency-first closure of a sliced package, which is what the
 	// element covers. Empty for every other kind.
 	slices []string
-	// cpe is the artifact's declared CPE 2.3 name, which is how a payload that is not a
-	// package is matched against advisories. Empty when the specification names none.
+	// cpe is the declared CPE 2.3 name for a package whose own index files none under,
+	// and for an artifact, which has no package URL a database can follow. Empty when the
+	// specification names none.
 	cpe string
 	// upstream is the source package the archive was built from, which is the name
 	// advisories are published under. Empty when the index names none.
 	upstream string
+	// vendor and release are the namespace and distribution the element is published
+	// under, which are the distribution's unless the repository is the vendor's own.
+	vendor   string
+	release  string
 	checksum string
 	// identity is the domain-separated element identity, which is what a format names
 	// the element by so the name changes when the element does.
@@ -213,6 +219,13 @@ type locked struct {
 	packages  map[string]lock.Package
 	slices    map[string]lock.Slice
 	artifacts map[string]lock.Artifact
+	// repositories by ID, so a record's identity is read from the repository that
+	// serves it and not from the distribution the image is built for.
+	repositories map[string]*lock.Repository
+	// distro and release are the distribution the image is built for, which names a
+	// record from a repository that publishes under the distribution's own identity.
+	distro  string
+	release string
 }
 
 func (input *SBOMInput) locked() locked {
@@ -220,6 +233,7 @@ func (input *SBOMInput) locked() locked {
 		packages:  map[string]lock.Package{},
 		slices:    map[string]lock.Slice{},
 		artifacts: map[string]lock.Artifact{},
+		distro:    input.Distro, release: input.Release,
 	}
 	for position := range input.Packages {
 		record := &input.Packages[position]
@@ -237,6 +251,13 @@ func (input *SBOMInput) locked() locked {
 		record := &input.Artifacts[position]
 		if record.Platform == input.Platform {
 			index.artifacts[record.Name] = *record
+		}
+	}
+	index.repositories = make(map[string]*lock.Repository, len(input.Repositories))
+	for position := range input.Repositories {
+		record := &input.Repositories[position]
+		if record.Platform == input.Platform {
+			index.repositories[record.ID] = record
 		}
 	}
 	return index
@@ -301,7 +322,7 @@ func (index locked) owner(path string, origin vfs.Origin) (*element, error) {
 	case whole && packed:
 		return nil, fmt.Errorf("attest: %s: %q is both a package and an artifact", path, origin.Package)
 	case whole:
-		return packageElement(&record)
+		return index.packageElement(&record)
 	case packed:
 		return artifactElement(&artifact)
 	}
@@ -340,6 +361,7 @@ func (index locked) sliceElement(path string, origin vfs.Origin) (*element, erro
 	if err != nil {
 		return nil, err
 	}
+	vendor, release := index.vendorOf(record.Repository)
 	return &element{
 		kind:     kindSlice,
 		key:      record.Package,
@@ -348,13 +370,30 @@ func (index locked) sliceElement(path string, origin vfs.Origin) (*element, erro
 		arch:     record.Architecture,
 		archive:  record.Package,
 		upstream: record.Source,
+		vendor:   vendor,
+		release:  release,
+		cpe:      record.CPE,
 		slices:   record.Closure,
 		identity: identity,
 	}, nil
 }
 
+// vendorOf returns the namespace and release a record is published under. A repository
+// that authenticates its own release identity publishes packages the base distribution
+// never built, so the vendor names them and the suite is the vendor's release. Naming
+// the base distribution instead would hand a scanner a package it believes that
+// distribution ships, and the distribution's advisories for the name describe its own
+// build of it rather than this one.
+func (index locked) vendorOf(repository string) (string, string) {
+	found, ok := index.repositories[repository]
+	if !ok || found.Identity != contents.RepositoryIdentityOwn {
+		return index.distro, index.release
+	}
+	return found.Name, found.Suite
+}
+
 // packageElement describes one whole package payload.
-func packageElement(record *lock.Package) (*element, error) {
+func (index locked) packageElement(record *lock.Package) (*element, error) {
 	checksum, err := lockedElement(kindPackage, record.Name, record.Version,
 		record.Content.SHA256)
 	if err != nil {
@@ -365,6 +404,7 @@ func packageElement(record *lock.Package) (*element, error) {
 	if err != nil {
 		return nil, err
 	}
+	vendor, release := index.vendorOf(record.Repository)
 	return &element{
 		kind:     kindPackage,
 		key:      record.Name,
@@ -373,6 +413,9 @@ func packageElement(record *lock.Package) (*element, error) {
 		arch:     record.Architecture,
 		archive:  record.Name,
 		upstream: record.Source,
+		vendor:   vendor,
+		release:  release,
+		cpe:      record.CPE,
 		checksum: checksum,
 		identity: identity,
 	}, nil

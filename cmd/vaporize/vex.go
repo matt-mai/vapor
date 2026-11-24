@@ -196,6 +196,7 @@ func (run *vexRun) vexPayload(built *builder.Image) ([]byte, error) {
 		Platform:     built.Platform.String(),
 		Distro:       run.lock.Provider.Distro,
 		Release:      run.lock.Provider.Release,
+		Repositories: run.lock.Repositories,
 		Claims:       run.spec.VEX.Assertions,
 		Packages:     run.lock.Packages,
 		Slices:       run.lock.Slices,

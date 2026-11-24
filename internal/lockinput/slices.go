@@ -100,7 +100,19 @@ func resolveSlicedPackages(ctx context.Context, request *Request, catalogues []*
 	if err := acquireGroups(ctx, request, payloads); err != nil {
 		return nil, err
 	}
-	return lockSlices(selections, archives)
+	return lockSlices(selections, archives, specCPEs(request.Spec))
+}
+
+// specCPEs maps a package to the CPE its slice requests declare. A package's requests
+// share one CPE, which the lock verification enforces.
+func specCPEs(specification *spec.Spec) map[string]string {
+	cpes := make(map[string]string)
+	for _, request := range specification.Contents.Slices {
+		if request.CPE != "" {
+			cpes[request.Package] = request.CPE
+		}
+	}
+	return cpes
 }
 
 // selectAllSlices resolves every slice request against repository metadata alone, so a
@@ -124,7 +136,8 @@ func selectAllSlices(request *Request, catalogues []*catalogueInput,
 	return selections, nil
 }
 
-func lockSlices(selections []sliceSelection, archives map[string]*archiveSet) ([]lock.Slice, error) {
+func lockSlices(selections []sliceSelection, archives map[string]*archiveSet,
+	cpes map[string]string) ([]lock.Slice, error) {
 	result := make([]lock.Slice, 0, len(selections))
 	for i := range selections {
 		item := &selections[i]
@@ -141,6 +154,7 @@ func lockSlices(selections []sliceSelection, archives map[string]*archiveSet) ([
 			Architecture: pkg.Architecture, Source: pkg.Source, Catalogue: item.catalogue,
 			Archive:    item.selection.Archive,
 			Repository: repositoryForSuite(set, item.selection.Suite),
+			CPE:        cpes[item.selection.RealName],
 			Content:    lock.Content{Path: pkg.Filename, SHA256: pkg.SHA256, Size: pkg.Size},
 			Selected:   item.selection.Selected, Closure: item.selection.Closure,
 			DefinitionDigest: item.selection.DefinitionDigest,

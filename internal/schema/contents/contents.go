@@ -23,9 +23,11 @@ type Contents struct {
 }
 
 // PackageRequest selects a whole package with an optional version constraint.
+// CPE is the advisory database's name for the package when its own index files none.
 type PackageRequest struct {
 	Name    string  `yaml:"name" json:"name"`
 	Version *string `yaml:"version" json:"version"`
+	CPE     string  `yaml:"cpe,omitempty" json:"cpe,omitzero"`
 }
 
 // SliceRequest selects a slice; Catalogue may be omitted with one source.
@@ -34,6 +36,7 @@ type SliceRequest struct {
 	Slice     string  `yaml:"slice" json:"slice"`
 	Version   *string `yaml:"version" json:"version"`
 	Catalogue *string `yaml:"catalogue" json:"catalogue"`
+	CPE       string  `yaml:"cpe,omitempty" json:"cpe,omitzero"`
 }
 
 // CatalogueSource selects an exclusive local directory or remote Git reference.

@@ -42,6 +42,7 @@ contents:
 | --------- | ------------------------------------------------------ |
 | `name`    | Required. Lowercase letters, digits, `+`, `.` and `-`. |
 | `version` | Optional version expression, see [versions](#versions). |
+| `cpe`     | Optional CPE 2.3 name, see [vendor packages](#naming-a-vendor-package-for-a-scanner). |
 
 An unpinned package needs only its name, written as a plain string. The mapping
 form stays for a pinned package, because the pin needs a place to go. The string
@@ -117,6 +118,7 @@ contents:
 | `slice`     | Required slice name, at least three characters, such as `release-info`. |
 | `version`   | Optional version expression, as for packages above.                     |
 | `catalogue` | Catalogue name. Optional when the specification declares one catalogue. |
+| `cpe`       | Optional CPE 2.3 name, as for packages above.                           |
 
 A package and slice pair can be selected only once. Two slices of one package are
 fine, and their version expressions apply together, see [versions](#versions).
@@ -339,6 +341,37 @@ The CPE has to be a CPE 2.3 name: thirteen colon-separated fields starting
 `cpe:2.3:`, with `a`, `o` or `h` as the part and a vendor and product that are not
 wildcards. Leave it out when the payload is a package, because a package's name,
 version and distribution are enough.
+
+### Naming a vendor package for a scanner
+
+A package from a vendor archive is published as that vendor's package, so a scanner
+looks for advisories under the vendor rather than the distribution. A vendor that files
+none leaves the package unmatched, and `cpe` on the request names it in a database that
+does:
+
+```yaml
+    - catalogue: ubuntu
+      package: nodejs
+      version: "~> 26.0"
+      slice: runtime
+      cpe: cpe:2.3:a:nodejs:node.js:*:*:*:*:*:*:*:*
+```
+
+A `*` version inherits the locked version, which keeps one declaration correct as the
+package moves, and a CPE that names a version is used as written. The field is allowed
+on a whole `packages` entry and on a `slices` entry; every request for one package has
+to declare the same CPE, because a package is one element in the document.
+
+Scanners other than trivy only consult a CPE for a Debian package when they are told
+to. For grype that is `match.dpkg.using-cpes: true`, and it applies to every package in
+the image, so a CPE is only worth declaring where a purl genuinely reaches nothing.
+
+With that switch on, grype compares the CPE against the version the purl carries, using
+the distribution's version rules. A vendor's Debian revision then reads as newer than
+the upstream release it was built from, which is why a current package reports nothing
+and an out-of-date one still does. Declare `*` as the CPE's version rather than typing
+the release number, so the comparison always sees the version that was actually
+installed.
 
 ### Installing a local package
 

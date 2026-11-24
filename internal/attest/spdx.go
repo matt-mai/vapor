@@ -185,16 +185,18 @@ func (input *SBOMInput) packageOf(found *element) spdxPackage {
 	case kindPackage:
 		spdx.Checksums = []spdxChecksum{{Algorithm: spdxSHA256, ChecksumValue: found.checksum}}
 		spdx.PackageFileName = found.reported + "_" + found.version + "_" + found.arch + ".deb"
-		spdx.ExternalRefs = purlRef(packageURL(input.Distro, input.Release,
+		spdx.ExternalRefs = purlRef(packageURL(found.vendor, found.release,
 			found.reported, found.version, found.arch, found.upstream))
+		spdx.ExternalRefs = append(spdx.ExternalRefs, optionalCPE(found)...)
 		spdx.Comment = "This package is included whole." + input.licenseNote(found)
 	case kindSlice:
 		// One element covers every slice of the package, because an advisory is filed
 		// under the package: the purl, the name and the version have to be the package's,
 		// and the comment says which slices the image actually holds.
 		spdx.Name = found.archive
-		spdx.ExternalRefs = purlRef(packageURL(input.Distro, input.Release,
+		spdx.ExternalRefs = purlRef(packageURL(found.vendor, found.release,
 			found.archive, found.version, found.arch, found.upstream))
+		spdx.ExternalRefs = append(spdx.ExternalRefs, optionalCPE(found)...)
 		spdx.Comment = "This package is present as slices " +
 			strings.Join(found.slices, ", ") + "." + input.licenseNote(found)
 	case kindArtifact:
@@ -226,6 +228,17 @@ func purlRef(locator string) []spdxExternal {
 func cpeRef(name string) spdxExternal {
 	return spdxExternal{ReferenceCategory: securityCategory, ReferenceType: cpeType,
 		ReferenceLocator: name}
+}
+
+// optionalCPE is the reference an element carries when the specification declared a CPE
+// for it. A package a vendor publishes is matched by its own index, if any, and by
+// nothing when the vendor files no advisories a purl can reach; the declared CPE names it
+// in a database that does.
+func optionalCPE(found *element) []spdxExternal {
+	if found.cpe == "" {
+		return nil
+	}
+	return []spdxExternal{cpeRef(found.cpe)}
 }
 
 // licenseNote points at the license text hardening kept, when the image has it. The
