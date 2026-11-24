@@ -3,6 +3,7 @@ package attest
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"sort"
 	"strings"
 
@@ -27,6 +28,10 @@ type Claim struct {
 	Absent []string
 	// Products are the package URLs this claim is about on its platform.
 	Products []string
+	// CPEs states the advisory-database name for a product when it is not the one the
+	// lock declares: an imported document may identify a product by a CPE of its own,
+	// and dropping it would publish a claim under a name no advisory index uses.
+	CPEs map[string]string
 	// Notes is what the claim has to say about its own evidence. Generation sets it when
 	// it publishes a claim whose absent paths were not checked.
 	Notes string
@@ -110,6 +115,7 @@ func ImportClaims(input *VEXInput, document *VEXDocument) ([]Claim, error) {
 			Statement:     statement.explanation(),
 			Notes:         statement.StatusNotes,
 			Products:      productURLs(products),
+			CPEs:          productCPEs(products),
 		})
 	}
 	return claims, nil
@@ -120,6 +126,19 @@ func (input *VEXInput) validate() error {
 		return fmt.Errorf("attest: %q is not a usable platform", input.Platform)
 	}
 	return nil
+}
+
+// productCPEs renders the CPE a source states beside each product URL, which an imported
+// document may name differently from the lock. A product the source named only by URL is
+// left out, so the payload falls back to the lock's CPE for it.
+func productCPEs(products []product) map[string]string {
+	stated := make(map[string]string, len(products))
+	for _, found := range products {
+		if found.cpe != "" {
+			stated[found.url()] = found.cpe
+		}
+	}
+	return stated
 }
 
 // productURLs renders the products a resolved claim is about, ordered so the same
@@ -157,6 +176,7 @@ func (input *VEXInput) compile(claim *attestation.VEXAssertion) (Claim, error) {
 		return Claim{}, err
 	}
 	resolved.Products = productURLs(products)
+	resolved.CPEs = productCPEs(products)
 	return resolved, nil
 }
 
@@ -189,11 +209,13 @@ func Coalesce(claims []Claim, evidence Evidence) ([]Claim, error) {
 		if existing, exists := byAssertion[key]; exists {
 			existing.Products = sortedUnique(append(existing.Products, claim.Products...))
 			existing.Absent = sortedUnique(append(existing.Absent, claim.Absent...))
+			existing.CPEs = mergedCPEs(existing.CPEs, claim.CPEs)
 			continue
 		}
 		stored := *claim
 		stored.Products = sortedUnique(claim.Products)
 		stored.Absent = sortedUnique(claim.Absent)
+		stored.CPEs = mergedCPEs(nil, claim.CPEs)
 		// The merged claim collects its notes from every claim about each of its
 		// products, so which claim was seen first never decides what is published.
 		stored.Notes = ""
@@ -208,6 +230,20 @@ func Coalesce(claims []Claim, evidence Evidence) ([]Claim, error) {
 		result = append(result, *current)
 	}
 	return result, nil
+}
+
+// mergedCPEs folds two claims' stated CPEs into one map. One product has one advisory
+// name, so a document that states two is refused later by the payload check rather than
+// silently resolved here; when both said the same nothing needs to change.
+func mergedCPEs(into, from map[string]string) map[string]string {
+	if len(from) == 0 {
+		return into
+	}
+	if into == nil {
+		into = make(map[string]string, len(from))
+	}
+	maps.Copy(into, from)
+	return into
 }
 
 // remember records what one claim says about each product it names, so the evidence and

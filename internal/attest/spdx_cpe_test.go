@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/matt-mai/vapor/internal/attest"
+	"github.com/matt-mai/vapor/internal/schema/contents"
 )
 
 const nodeCPE = "cpe:2.3:a:nodejs:node.js:26.13.1:*:*:*:*:*:*:*"
@@ -126,5 +127,31 @@ func TestSPDX_WildcardCPETakesTheLockedVersion(t *testing.T) {
 				t.Fatalf("cpe = %q, want %q", found, testCase.want)
 			}
 		})
+	}
+}
+
+// TestSPDX_EscapesAnEpochVersion keeps a Debian version's epoch inside one CPE field. A
+// colon is the field separator, so substituting the version verbatim would hand a scanner
+// a fourteen-field name, which Vapor's own importer refuses.
+func TestSPDX_EscapesAnEpochVersion(t *testing.T) {
+	input, _ := newSBOMFixture()
+	input.Packages[0].Version = "1:9.4-3ubuntu1"
+	input.Packages[0].CPE = "cpe:2.3:a:gnu:coreutils:*:*:*:*:*:*:*:*"
+	payload, err := attest.SPDX(input)
+	if err != nil {
+		t.Fatalf("SPDX: %v", err)
+	}
+	refs := packageNamed(t, decodeSBOM(t, payload), "coreutils").ExternalRefs
+	var found string
+	for _, ref := range refs {
+		if ref.ReferenceType == "cpe23Type" {
+			found = ref.ReferenceLocator
+		}
+	}
+	if !strings.Contains(found, `1\:9.4-3ubuntu1`) {
+		t.Fatalf("cpe = %q, want the epoch escaped", found)
+	}
+	if err := contents.ValidateCPE(found); err != nil {
+		t.Fatalf("ValidateCPE(%q) = %v", found, err)
 	}
 }

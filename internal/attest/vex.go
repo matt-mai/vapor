@@ -159,17 +159,22 @@ func (input *VEXInput) statementOf(claim *Claim) vexPayloadStatement {
 		rendered.ImpactStatement = claim.Statement
 	}
 	for _, product := range claim.Products {
+		// A CPE the claim's source stated is the document's own identity for the product,
+		// so it wins over the lock's; the lock only fills in what the claim left unsaid.
+		cpe := claim.CPEs[product]
+		if cpe == "" {
+			cpe = input.lockCPE(product)
+		}
 		rendered.Products = append(rendered.Products, vexPayloadProduct{ID: product,
-			Identifiers: input.identifiers(product)})
+			Identifiers: productIdentifiers(product, cpe)})
 	}
 	return rendered
 }
 
-// identifiers is the OpenVEX identifier map for one product URL of a resolved claim. The
-// URL identifies the product; a CPE the lock record declares names it in an advisory
-// database the URL cannot reach, so it is published beside the URL rather than instead.
-func (input *VEXInput) identifiers(url string) map[string]string {
-	cpe := input.lockCPE(url)
+// productIdentifiers is the OpenVEX identifier map for one product URL of a resolved
+// claim. The URL identifies the product; a CPE names it in an advisory database the URL
+// cannot reach, so it is published beside the URL rather than instead.
+func productIdentifiers(url, cpe string) map[string]string {
 	if cpe == "" {
 		return nil
 	}

@@ -589,3 +589,61 @@ func TestVEX_NamesTheVendorForItsOwnRepository(t *testing.T) {
 		}
 	}
 }
+
+// TestVEX_KeepsTheCPEAnImportedDocumentStates holds the finding that an imported
+// document's CPE was matched and then dropped: the claim carried only the URL, so the
+// payload re-read the lock and published a name the document never stated.
+func TestVEX_KeepsTheCPEAnImportedDocumentStates(t *testing.T) {
+	input := newVEXInputWithTree(t)
+	const stated = "cpe:2.3:a:example:libc:2.41-1:*:*:*:*:*:*:*"
+	statement := `{"vulnerability": {"name": "CVE-2026-0090"},
+	"products": [{"identifiers": {"purl": "pkg:deb/ubuntu/libc6@2.41-1", "cpe": "` + stated + `"}}],
+	"status": "under_investigation"}`
+	document, err := attest.DecodeVEXDocument([]byte(openVEXDocument(statement)))
+	if err != nil {
+		t.Fatalf("DecodeVEXDocument: %v", err)
+	}
+	imported, err := attest.ImportClaims(input, document)
+	if err != nil {
+		t.Fatalf("ImportClaims: %v", err)
+	}
+	input.Imported = imported
+	payload, err := attest.VEX(input)
+	if err != nil {
+		t.Fatalf("VEX: %v", err)
+	}
+	statements := decodeVEX(t, payload)["statements"].([]any)
+	product := statements[0].(map[string]any)["products"].([]any)[0].(map[string]any)
+	identifiers, ok := product["identifiers"].(map[string]any)
+	if !ok {
+		t.Fatalf("identifiers = %v, want the imported cpe", product)
+	}
+	if identifiers["cpe"] != stated {
+		t.Fatalf("cpe = %v, want the imported %s", identifiers["cpe"], stated)
+	}
+}
+
+// TestVEX_EscapesAnEpochVersion holds both documents to a CPE a reader can split: a
+// Debian version carries an epoch, and a colon in a field is a field separator unless it
+// is escaped.
+func TestVEX_EscapesAnEpochVersion(t *testing.T) {
+	input := newVEXInputWithTree(t)
+	input.Packages[0].Version = "1:9.4-3ubuntu1"
+	input.Packages[0].CPE = "cpe:2.3:a:gnu:coreutils:*:*:*:*:*:*:*:*"
+	input.Claims = []attestation.VEXAssertion{vexAssertion("CVE-2026-0091", "coreutils",
+		attestation.StatusFixed)}
+	payload, err := attest.VEX(input)
+	if err != nil {
+		t.Fatalf("VEX: %v", err)
+	}
+	statements := decodeVEX(t, payload)["statements"].([]any)
+	product := statements[0].(map[string]any)["products"].([]any)[0].(map[string]any)
+	identifiers := product["identifiers"].(map[string]any)
+	cpe, _ := identifiers["cpe"].(string)
+	if fields := contents.SplitCPE(cpe); len(fields) != 13 {
+		t.Fatalf("cpe %q reads as %d fields, want 13", cpe, len(fields))
+	}
+	if err := contents.ValidateCPE(cpe); err != nil {
+		t.Fatalf("ValidateCPE(%q) = %v", cpe, err)
+	}
+}

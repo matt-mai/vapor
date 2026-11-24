@@ -94,7 +94,9 @@ holds rather than an all-versions identifier.
   claim names can be joined to the SBOM by purl alone.
 - An imported product may state a CPE beside its purl. The CPE is the document's own
   identity for the product and replaces the lock's rather than being compared, because a
-  document naming an entry the lock does not hold is the source of that name.
+  document naming an entry the lock does not hold is the source of that name. The claim
+  carries it, so the payload publishes the name the document stated even when the lock
+  states another or none.
 - An imported product may name its content as loosely as the purl grammar allows. Type,
   name and version have to match a locked record exactly. A qualifier the document states
   has to match; a qualifier it omits constrains nothing, because a document written
