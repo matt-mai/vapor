@@ -378,7 +378,10 @@ func acquireArtifact(ctx context.Context, fetcher Fetcher, local Local, store St
 		return 0, errors.New("rewind downloaded payload")
 	}
 	if err := store.Store(file, artifact.SHA256, written); err != nil {
-		return 0, storeFailure(err)
+		// The bytes are already downloaded and verified, so nothing here waits on the
+		// network: a deadline means the cache could not take the file, and calling that
+		// a failed download would send the reader looking at the origin.
+		return 0, fmt.Errorf("store downloaded artifact: %w", err)
 	}
 	return written, nil
 }

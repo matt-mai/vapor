@@ -77,7 +77,11 @@ in place cannot reach the decoder.
 ## Products
 
 A product is a package URL, the same string the SPDX document writes for that element,
-so a reader can match the two payloads without translating names.
+so a reader can match the two payloads without translating names. When the lock records a
+CPE for that element, the product states it beside the URL as an additional identifier, so
+an advisory database entry that has no match for the purl can still be reached. The CPE is
+resolved against the locked version, so a `*` version field names the version the image
+holds rather than an all-versions identifier.
 
 - A package resolves to `pkg:deb/<distro>/<name>@<version>?arch=<arch>&distro=<distro>-<release>&upstream=<source>`,
   whether the lock holds it whole or as slices. The claim is about the package, and
@@ -88,6 +92,9 @@ so a reader can match the two payloads without translating names.
   specification declares rather than the local name it is locked under.
 - Both are the locators the SPDX document carries, one per element, so every product a
   claim names can be joined to the SBOM by purl alone.
+- An imported product may state a CPE beside its purl. The CPE is the document's own
+  identity for the product and replaces the lock's rather than being compared, because a
+  document naming an entry the lock does not hold is the source of that name.
 - An imported product may name its content as loosely as the purl grammar allows. Type,
   name and version have to match a locked record exactly. A qualifier the document states
   has to match; a qualifier it omits constrains nothing, because a document written
@@ -197,9 +204,9 @@ order a specification or a document happened to list them in never reaches the b
 These are refusals, not preferences, and each is checked where it can first go wrong:
 
 - Another OpenVEX version, another document format, or a second document in one input.
-- A product identified by anything other than a package URL: a CPE, a component hash, a
-  component `@id` that is not a `pkg:` URL, a subcomponent, or a `@id` that disagrees
-  with the purl.
+- A product identified by anything other than a package URL or the CPE stated beside
+  one: a hash, a subcomponent, a `@id` that is not a `pkg:` URL, an identifier name
+  Vapor does not recognise, or a `@id` that disagrees with the purl.
 - Vulnerability aliases. A statement that fills in `vulnerability.aliases` is refused,
   not merged, because Vapor publishes one identifier per claim: a document naming the
   same issue as both `CVE-…` and its `GHSA-…` alias would otherwise produce two claims

@@ -550,3 +550,69 @@ contents:
 		t.Fatalf("err = %v, want the vendor scope enforced on a slice", refused)
 	}
 }
+
+// A dependency-only package has no request to compare its CPE with, so a record that
+// states one attributes the package to an identity the specification never declared.
+// A scanner reading the attestation document would then file it under a name the
+// specification did not choose.
+func TestVerifyLockfile_DependencyCPE(t *testing.T) {
+	t.Parallel()
+	spec, lock := validMultiPlatformLock(t)
+	lock.Packages = append(lock.Packages, Package{
+		Platform:     "linux/amd64",
+		Name:         "libssl3t64",
+		Version:      "3.0-1",
+		Architecture: "amd64",
+		Repository:   lock.Repositories[0].ID,
+		CPE:          nodeCPEForLock,
+		Content: Content{Path: "pool/main/o/openssl/libssl3t64_3.0-1_amd64.deb",
+			SHA256: strings.Repeat("8", 64), Size: 900},
+	})
+	if err := VerifyLockfileForProvider(spec, lock, spec.Release, bindingDefaults()); err == nil {
+		t.Fatal("a dependency cpe the specification never declared was accepted")
+	}
+}
+
+// The same for a slice pulled in only as a dependency.
+func TestVerifyLockfile_DependencySliceCPE(t *testing.T) {
+	t.Parallel()
+	spec, lock := validMultiPlatformLock(t)
+	lock.Slices = append(lock.Slices, Slice{
+		Platform:         "linux/amd64",
+		Package:          "libc6",
+		Version:          "2.39-0ubuntu8",
+		Architecture:     "amd64",
+		Catalogue:        "custom",
+		Archive:          "ubuntu",
+		Repository:       lock.Repositories[0].ID,
+		CPE:              nodeCPEForLock,
+		Content:          Content{Path: "pool/main/g/glibc/libc6_2.39_amd64.deb", SHA256: strings.Repeat("5", 64), Size: 2048},
+		Closure:          []string{"lib"},
+		DefinitionDigest: "sha256:" + strings.Repeat("6", 64),
+	})
+	if err := VerifyLockfileForProvider(spec, lock, spec.Release, bindingDefaults()); err == nil {
+		t.Fatal("a dependency slice cpe the specification never declared was accepted")
+	}
+}
+
+// A direct record that matches its declaration is still accepted, so the comparison is
+// not a blanket refusal.
+func TestVerifyLockfile_DeclaredCPEIsAccepted(t *testing.T) {
+	t.Parallel()
+	spec, err := loadText(t, contentsFixtureWithCPE)
+	if err != nil {
+		t.Fatal(err)
+	}
+	digest, err := spec.SpecDigest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, lock := validMultiPlatformLock(t)
+	lock.SpecDigest = digest
+	for position := range lock.Packages {
+		lock.Packages[position].CPE = nodeCPEForLock
+	}
+	if err := VerifyLockfileForProvider(spec, lock, spec.Release, bindingDefaults()); err != nil {
+		t.Fatalf("declared cpe rejected: %v", err)
+	}
+}

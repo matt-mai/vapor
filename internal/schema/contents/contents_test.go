@@ -261,3 +261,50 @@ func TestContents_Rejections(t *testing.T) {
 		})
 	}
 }
+
+// Two slice requests for one package are one element in the attestation document, so
+// they have to agree on the CPE that element publishes. An omission beside a declaration
+// is the same disagreement as two different names, and it is refused while the
+// specification is validated rather than after a lock exists.
+func TestLoadSpec_SliceRequestsDisagreeOnCPE(t *testing.T) {
+	t.Parallel()
+	const otherCPE = "cpe:2.3:a:gnu:base-files:13ubuntu10:*:*:*:*:*:*:*"
+	cases := map[string]struct {
+		first, second string
+		rejected      bool
+	}{
+		"omission beside a declaration": {
+			first: "", second: "      cpe: " + otherCPE + "\n", rejected: true,
+		},
+		"declaration beside an omission": {
+			first: "      cpe: " + otherCPE + "\n", second: "", rejected: true,
+		},
+		"two different names": {
+			first:    "      cpe: " + otherCPE + "\n",
+			second:   "      cpe: cpe:2.3:a:gnu:base-files:13ubuntu11:*:*:*:*:*:*:*\n",
+			rejected: true,
+		},
+		"identical declarations": {
+			first: "      cpe: " + otherCPE + "\n", second: "      cpe: " + otherCPE + "\n",
+		},
+		"neither declares one": {},
+	}
+	for name, testCase := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			text := strings.Replace(contentsFixture, `    - package: base-files
+      slice: release-info`, `    - package: base-files
+      slice: release-info
+`+testCase.first+`    - package: base-files
+      slice: copyright
+`+testCase.second, 1)
+			_, err := loadText(t, text)
+			if testCase.rejected && err == nil {
+				t.Fatal("disagreeing slice requests were accepted")
+			}
+			if !testCase.rejected && err != nil {
+				t.Fatalf("agreeing slice requests rejected: %v", err)
+			}
+		})
+	}
+}

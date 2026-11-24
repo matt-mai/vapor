@@ -9,6 +9,8 @@ import (
 
 	"github.com/matt-mai/vapor/internal/attest"
 	"github.com/matt-mai/vapor/internal/schema/attestation"
+	"github.com/matt-mai/vapor/internal/schema/contents"
+	"github.com/matt-mai/vapor/internal/schema/lock"
 	"github.com/matt-mai/vapor/internal/vfs"
 )
 
@@ -490,5 +492,100 @@ func TestVEX_ProductsJoinTheSBOMPurls(t *testing.T) {
 	}
 	if len(locators) != 3 {
 		t.Fatalf("SPDX purls = %v, want one per element", locators)
+	}
+}
+
+// TestVEX_StatesTheDeclaredCPE checks the finding that started this: the CPE the lock
+// records reaches the OpenVEX product beside the purl. A scanner matches a package by URL
+// and finds nothing in a database that files the vendor's advisories under a CPE name.
+func TestVEX_StatesTheDeclaredCPE(t *testing.T) {
+	input := newVEXInputWithTree(t)
+	input.Packages[0].CPE = nodeCPE
+	input.Claims = []attestation.VEXAssertion{vexAssertion("CVE-2026-0080", "coreutils",
+		attestation.StatusFixed)}
+	payload, err := attest.VEX(input)
+	if err != nil {
+		t.Fatalf("VEX: %v", err)
+	}
+	document := decodeVEX(t, payload)
+	statements, ok := document["statements"].([]any)
+	if !ok || len(statements) != 1 {
+		t.Fatalf("statements = %v", document["statements"])
+	}
+	product := statements[0].(map[string]any)["products"].([]any)[0].(map[string]any)
+	identifiers, ok := product["identifiers"].(map[string]any)
+	if !ok {
+		t.Fatalf("identifiers = %v, want a cpe beside the purl", product)
+	}
+	if identifiers["cpe"] != nodeCPE {
+		t.Fatalf("cpe = %v, want %s", identifiers["cpe"], nodeCPE)
+	}
+	if !strings.HasPrefix(identifiers["purl"].(string), "pkg:deb/ubuntu/coreutils@") {
+		t.Fatalf("purl = %v", identifiers["purl"])
+	}
+}
+
+// TestVEX_OmitsIdentifiersWhenNoCPEIsDeclared keeps a document for a package without a
+// declared CPE as it was: the URL alone identifies it, and an empty identifier map would
+// claim an identity nobody stated.
+func TestVEX_OmitsIdentifiersWhenNoCPEIsDeclared(t *testing.T) {
+	input := newVEXInputWithTree(t)
+	input.Claims = []attestation.VEXAssertion{vexAssertion("CVE-2026-0081", "coreutils",
+		attestation.StatusFixed)}
+	payload, err := attest.VEX(input)
+	if err != nil {
+		t.Fatalf("VEX: %v", err)
+	}
+	document := decodeVEX(t, payload)
+	statements := document["statements"].([]any)
+	product := statements[0].(map[string]any)["products"].([]any)[0].(map[string]any)
+	if _, present := product["identifiers"]; present {
+		t.Fatalf("product = %v, want no identifiers", product)
+	}
+}
+
+// TestVEX_WildcardCPETakesTheLockedVersion holds the VEX document to the same rule as the
+// SPDX document: a `*` version names the version the lock recorded.
+func TestVEX_WildcardCPETakesTheLockedVersion(t *testing.T) {
+	input := newVEXInputWithTree(t)
+	input.Packages[0].CPE = "cpe:2.3:a:gnu:coreutils:*:*:*:*:*:*:*:*"
+	input.Claims = []attestation.VEXAssertion{vexAssertion("CVE-2026-0082", "coreutils",
+		attestation.StatusFixed)}
+	payload, err := attest.VEX(input)
+	if err != nil {
+		t.Fatalf("VEX: %v", err)
+	}
+	document := decodeVEX(t, payload)
+	statements := document["statements"].([]any)
+	product := statements[0].(map[string]any)["products"].([]any)[0].(map[string]any)
+	identifiers := product["identifiers"].(map[string]any)
+	if identifiers["cpe"] != "cpe:2.3:a:gnu:coreutils:9.4-3ubuntu1:*:*:*:*:*:*:*" {
+		t.Fatalf("cpe = %v", identifiers["cpe"])
+	}
+}
+
+// TestVEX_NamesTheVendorForItsOwnRepository checks that VEX and SPDX answer the vendor
+// question the same way. Both documents name a product by its package URL, so a package
+// one names as the vendor's and the other as the distribution's would be two products to
+// a reader matching them against each other.
+func TestVEX_NamesTheVendorForItsOwnRepository(t *testing.T) {
+	repository := lock.Repository{ID: "sha256:" + strings.Repeat("2", 64), Name: "nodesource",
+		Platform: "linux/amd64", Suite: "nodistro", Identity: contents.RepositoryIdentityOwn}
+	input := newVEXInputWithTree(t)
+	input.Repositories = []lock.Repository{repository}
+	input.Packages[0].Repository = repository.ID
+	input.Claims = []attestation.VEXAssertion{vexAssertion("CVE-2026-0060", "coreutils",
+		attestation.StatusFixed)}
+	payload, err := attest.VEX(input)
+	if err != nil {
+		t.Fatalf("VEX: %v", err)
+	}
+	document := decodeVEX(t, payload)
+	statements := document["statements"].([]any)
+	product := statements[0].(map[string]any)["products"].([]any)[0].(map[string]any)
+	for _, want := range []string{"pkg:deb/nodesource/coreutils@", "distro=nodesource-nodistro"} {
+		if identifier, _ := product["@id"].(string); !strings.Contains(identifier, want) {
+			t.Fatalf("@id = %v, want %s", product["@id"], want)
+		}
 	}
 }

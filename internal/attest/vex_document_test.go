@@ -123,3 +123,49 @@ func TestDecodeVEXDocument_RefusesTooManyStatements(t *testing.T) {
 		t.Fatalf("error = %v", err)
 	}
 }
+
+// TestOpenVEX_AcceptsTheCPEItWrites checks that a document Vapor renders reads back. A
+// product states its purl and the declared CPE beside it, so the importer has to accept
+// both or Vapor refuses its own output.
+func TestOpenVEX_AcceptsTheCPEItWrites(t *testing.T) {
+	document := `{"@context": "https://openvex.dev/ns/v0.2.0", "@id": "https://example.invalid/vex/x.json", "author": "Example", "timestamp": "2026-11-20T09:00:00Z", "version": 1,
+"statements": [{"vulnerability": {"name": "CVE-2026-0070"},
+"products": [{"@id": "pkg:deb/ubuntu/coreutils@9.4-3ubuntu1?arch=amd64",
+"identifiers": {"purl": "pkg:deb/ubuntu/coreutils@9.4-3ubuntu1?arch=amd64",
+"cpe": "cpe:2.3:a:gnu:coreutils:9.4-3ubuntu1:*:*:*:*:*:*:*"}}],
+"status": "fixed"}]}`
+	parsed, err := attest.DecodeVEXDocument([]byte(document))
+	if err != nil {
+		t.Fatalf("ImportOpenVEX: %v", err)
+	}
+	if len(parsed.Statements) != 1 || len(parsed.Statements[0].Products) != 1 {
+		t.Fatalf("statements = %v", parsed.Statements)
+	}
+}
+
+// TestOpenVEX_RefusesAnUnknownIdentifier keeps the importer to the identities it can
+// check: a swid or an unsupported key would be dropped silently, and a dropped identity is
+// a claim Vapor appears to have read but did not.
+func TestOpenVEX_RefusesAnUnknownIdentifier(t *testing.T) {
+	document := `{"@context": "https://openvex.dev/ns/v0.2.0", "@id": "https://example.invalid/vex/x.json", "author": "Example", "timestamp": "2026-11-20T09:00:00Z", "version": 1,
+"statements": [{"vulnerability": {"name": "CVE-2026-0071"},
+"products": [{"identifiers": {"purl": "pkg:deb/ubuntu/coreutils@9.4-3ubuntu1?arch=amd64",
+"swid": "something"}}],
+"status": "fixed"}]}`
+	if _, err := attest.DecodeVEXDocument([]byte(document)); err == nil {
+		t.Fatal("an unsupported identifier was accepted")
+	}
+}
+
+// TestOpenVEX_RefusesAMalformedCPE checks the declared-CPE grammar on import, so a
+// document cannot introduce a name the specification could never have declared.
+func TestOpenVEX_RefusesAMalformedCPE(t *testing.T) {
+	document := `{"@context": "https://openvex.dev/ns/v0.2.0", "@id": "https://example.invalid/vex/x.json", "author": "Example", "timestamp": "2026-11-20T09:00:00Z", "version": 1,
+"statements": [{"vulnerability": {"name": "CVE-2026-0072"},
+"products": [{"identifiers": {"purl": "pkg:deb/ubuntu/coreutils@9.4-3ubuntu1?arch=amd64",
+"cpe": "not-a-cpe"}}],
+"status": "fixed"}]}`
+	if _, err := attest.DecodeVEXDocument([]byte(document)); err == nil {
+		t.Fatal("a malformed cpe was accepted")
+	}
+}

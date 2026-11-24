@@ -29,6 +29,7 @@ func validateRequests(contents *Contents) error {
 		return err
 	}
 	seen, pins := make(map[string]bool), make(map[string]string)
+	cpes := make(map[string]string)
 	for i, request := range contents.Slices {
 		if whole[request.Package] {
 			return errors.New("whole-package/slice overlap is not allowed")
@@ -41,6 +42,26 @@ func validateRequests(contents *Contents) error {
 		if err := validateSlice(request, contents.Catalogues, pins); err != nil {
 			return fmt.Errorf("contents.slices[%d]: %w", i, err)
 		}
+		if err := agreeOnCPE(cpes, request.Package, request.CPE); err != nil {
+			return fmt.Errorf("contents.slices[%d]: %w", i, err)
+		}
+	}
+	return nil
+}
+
+// agreeOnCPE holds every request for one package to the same declared CPE, including the
+// requests that declare none. One package is one element in the attestation document, so
+// a name only some of its requests state would attribute the package to an identity the
+// others never asked for; an omission beside a declaration is the same disagreement as
+// two different names.
+func agreeOnCPE(declared map[string]string, name, cpe string) error {
+	first, seen := declared[name]
+	if !seen {
+		declared[name] = cpe
+		return nil
+	}
+	if first != cpe {
+		return fmt.Errorf("requests for %q declare different CPEs", name)
 	}
 	return nil
 }

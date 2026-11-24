@@ -202,11 +202,9 @@ func (input *SBOMInput) packageOf(found *element) spdxPackage {
 	case kindArtifact:
 		spdx.Checksums = []spdxChecksum{{Algorithm: spdxSHA256, ChecksumValue: found.checksum}}
 		spdx.ExternalRefs = purlRef(artifactURL(found.reported, found.version))
-		if found.cpe != "" {
-			// A payload that is not a package has no purl a database can follow, so the
-			// declared CPE is the only handle a scanner has on it.
-			spdx.ExternalRefs = append(spdx.ExternalRefs, cpeRef(found.cpe))
-		}
+		// A payload that is not a package has no purl a database can follow, so the
+		// declared CPE is the only handle a scanner has on it.
+		spdx.ExternalRefs = append(spdx.ExternalRefs, optionalCPE(found)...)
 		spdx.Comment = "This package is the artifact payload."
 	case kindModule:
 		// A vendored module has no payload of its own to checksum: its files belong to the
@@ -235,10 +233,30 @@ func cpeRef(name string) spdxExternal {
 // nothing when the vendor files no advisories a purl can reach; the declared CPE names it
 // in a database that does.
 func optionalCPE(found *element) []spdxExternal {
-	if found.cpe == "" {
+	named := declaredCPE(found.cpe, found.version)
+	if named == "" {
 		return nil
 	}
-	return []spdxExternal{cpeRef(found.cpe)}
+	return []spdxExternal{cpeRef(named)}
+}
+
+// declaredCPE renders a declared CPE against the version the lock recorded. A `*` in the
+// version field inherits it, so one declaration stays correct as the package moves, and
+// both attestation documents name the version rather than an all-versions identifier.
+//
+// A declaration the validator would have refused yields no reference rather than a
+// guess.
+func declaredCPE(declared, version string) string {
+	if declared == "" {
+		return ""
+	}
+	fields := strings.Split(declared, ":")
+	const versionField = 5
+	if len(fields) != 13 || fields[versionField] != "*" || version == "" {
+		return declared
+	}
+	fields[versionField] = version
+	return strings.Join(fields, ":")
 }
 
 // licenseNote points at the license text hardening kept, when the image has it. The

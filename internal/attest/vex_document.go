@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/matt-mai/vapor/internal/schema/attestation"
+	"github.com/matt-mai/vapor/internal/schema/contents"
 )
 
 // OpenVEX v0.2.0 is the only imported format. Its documents are JSON-LD objects whose
@@ -220,15 +221,19 @@ func (vulnerability *VEXVulnerability) validate() error {
 	return nil
 }
 
-// validate keeps a product to the one identity Vapor can check: a purl.
+// validate keeps a product to the identities Vapor can check: the purl it matches the
+// lock by and the declared CPE it publishes beside it. A CPE names an advisory
+// database's entry for a package whose purl reaches none, so a document Vapor wrote has
+// to be readable again with one.
 func (component *VEXComponent) validate() error {
 	switch {
 	case len(component.Hashes) != 0:
 		return errors.New("product hashes are not supported")
 	case len(component.Subcomponents) != 0:
 		return errors.New("product subcomponents are not supported")
-	case len(component.Identifiers) > 1 || (len(component.Identifiers) == 1 && component.Identifiers["purl"] == ""):
-		return errors.New("only a purl identifier is supported")
+	}
+	if err := component.validateIdentifiers(); err != nil {
+		return err
 	}
 	if identified, changed := component.Identifiers["purl"]; changed {
 		if component.ID != "" && component.ID != identified {
@@ -238,6 +243,28 @@ func (component *VEXComponent) validate() error {
 	}
 	if !strings.HasPrefix(component.ID, "pkg:") {
 		return errors.New("product must be identified by a purl")
+	}
+	return nil
+}
+
+// validateIdentifiers keeps a product to the two names Vapor can check, each stated
+// once and each usable as an identity.
+func (component *VEXComponent) validateIdentifiers() error {
+	if len(component.Identifiers) > 2 {
+		return errors.New("only purl and cpe identifiers are supported")
+	}
+	for name, value := range component.Identifiers {
+		if name != "purl" && name != "cpe" {
+			return fmt.Errorf("identifier %q is not supported", name)
+		}
+		if value == "" {
+			return fmt.Errorf("identifier %q is empty", name)
+		}
+	}
+	if cpe, named := component.Identifiers["cpe"]; named {
+		if err := contents.ValidateDeclaredCPE(cpe); err != nil {
+			return err
+		}
 	}
 	return nil
 }

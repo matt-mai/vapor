@@ -78,3 +78,53 @@ func TestSPDX_CPESitsBesideThePurl(t *testing.T) {
 		t.Fatalf("purl = %q, want the package URL", refs[0].ReferenceLocator)
 	}
 }
+
+// TestSPDX_WildcardCPETakesTheLockedVersion checks the promise the reference makes: a
+// declared `*` in the version field names the version the lock recorded. Passing the
+// declaration through verbatim would hand a scanner an all-versions identifier, and the
+// document is the only place the resolved name can appear.
+func TestSPDX_WildcardCPETakesTheLockedVersion(t *testing.T) {
+	cases := map[string]struct {
+		apply func(*attest.SBOMInput)
+		name  string
+		want  string
+	}{
+		"whole package": {
+			apply: func(input *attest.SBOMInput) {
+				input.Packages[0].CPE = "cpe:2.3:a:gnu:coreutils:*:*:*:*:*:*:*:*"
+			},
+			name: "coreutils",
+			want: "cpe:2.3:a:gnu:coreutils:9.4-3ubuntu1:*:*:*:*:*:*:*",
+		},
+		"sliced package": {
+			apply: func(input *attest.SBOMInput) { input.Slices[0].CPE = "cpe:2.3:a:gnu:libc6:*:*:*:*:*:*:*:*" },
+			name:  "libc6",
+			want:  "cpe:2.3:a:gnu:libc6:2.41-1:*:*:*:*:*:*:*",
+		},
+		"fixed version is left alone": {
+			apply: func(input *attest.SBOMInput) { input.Packages[0].CPE = nodeCPE },
+			name:  "coreutils",
+			want:  nodeCPE,
+		},
+	}
+	for name, testCase := range cases {
+		t.Run(name, func(t *testing.T) {
+			input, _ := newSBOMFixture()
+			testCase.apply(input)
+			payload, err := attest.SPDX(input)
+			if err != nil {
+				t.Fatalf("SPDX: %v", err)
+			}
+			refs := packageNamed(t, decodeSBOM(t, payload), testCase.name).ExternalRefs
+			var found string
+			for _, ref := range refs {
+				if ref.ReferenceType == "cpe23Type" {
+					found = ref.ReferenceLocator
+				}
+			}
+			if found != testCase.want {
+				t.Fatalf("cpe = %q, want %q", found, testCase.want)
+			}
+		})
+	}
+}

@@ -122,6 +122,16 @@ func (input *VEXInput) validate() error {
 	return nil
 }
 
+// productURLs renders the products a resolved claim is about, ordered so the same
+// content always produces the same claim.
+func productURLs(products []product) []string {
+	urls := make([]string, 0, len(products))
+	for _, found := range products {
+		urls = append(urls, found.url())
+	}
+	return sortedUnique(urls)
+}
+
 // compile resolves one assertion against the lock.
 func (input *VEXInput) compile(claim *attestation.VEXAssertion) (Claim, error) {
 	resolved := Claim{
@@ -277,14 +287,6 @@ func assertionOf(claim *Claim) assertion {
 		vulnerability: claim.Vulnerability, status: claim.Status,
 		justification: claim.Justification, statement: claim.Statement,
 	}
-}
-
-func productURLs(products []product) []string {
-	urls := make([]string, 0, len(products))
-	for _, found := range products {
-		urls = append(urls, found.url())
-	}
-	return sortedUnique(urls)
 }
 
 // sortedUnique removes repeats and orders the result, so the same content always
