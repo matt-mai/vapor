@@ -50,6 +50,17 @@ contracts, `docs/image-spec-and-lockfile.md` for spec/lock design, and relevant
 `docs/user/` / `docs/developer/` references for exact feature behavior and limits.
 Pinned upstream compatibility evidence is in `docs/developer/chisel-v3-compatibility.md`.
 
+## Repo skill maintenance
+
+Maintain a repo-specific skill capturing recurring `vapor` / `vaporize` patterns,
+quirks, and test/build shortcuts that go beyond what belongs in `AGENTS.md` in .agents/skills/vapor
+- Keep the skill strictly additive to `AGENTS.md`: do not duplicate core
+  architecture, security, or quality-gate rules here, and never weaken them.
+- Update or create the skill only when a non-obvious workflow, package
+  convention, or debugging pattern proves repeatable across tasks.
+- Always show the proposed skill diff or content and get explicit user
+  confirmation before creating or modifying skill files.
+
 ## Quality gates
 
 Before calling an implementation substep with go code changes complete, run:
