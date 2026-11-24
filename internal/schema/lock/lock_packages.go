@@ -82,12 +82,11 @@ func verifyLockPackageRepository(pkg *Package, spec *schemaSpec.Spec, repositori
 }
 
 func verifyLockPackageRequests(spec *schemaSpec.Spec, packages map[lockPackageKey]*Package) error {
+	// One request per package name is already enforced by the specification decoder, so
+	// there is one CPE per name to compare the lock against.
 	declared := make(map[string]string, len(spec.Contents.Packages))
 	for _, request := range spec.Contents.Packages {
 		declared[request.Name] = request.CPE
-		if err := agreeOnPackageCPE(declared, request); err != nil {
-			return err
-		}
 	}
 	for _, request := range spec.Contents.Packages {
 		for _, platform := range spec.Platforms {
@@ -111,21 +110,6 @@ func verifyPackageCPEs(declared map[string]string, packages map[lockPackageKey]*
 			return fmt.Errorf("lock packages: package %q cpe does not match the specification on %s",
 				key.name, key.platform)
 		}
-	}
-	return nil
-}
-
-// agreeOnPackageCPE refuses two requests for one package that state different CPEs. A
-// package is one element in the attestation document, so its requests have to agree on
-// the identity that document publishes.
-func agreeOnPackageCPE(declared map[string]string, request contents.PackageRequest) error {
-	first, seen := declared[request.Name]
-	if !seen {
-		declared[request.Name] = request.CPE
-		return nil
-	}
-	if first != request.CPE {
-		return fmt.Errorf("lock packages: requests for %q declare different CPEs", request.Name)
 	}
 	return nil
 }
