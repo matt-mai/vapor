@@ -23,8 +23,21 @@ echo "== dpkg database"
 echo "== apt sources"
 /usr/bin/apt-get check
 
+echo "== base accounts"
+# apt's postinst gives its download directories to `_apt` and `root`, and a script that
+# names an account needs the record even though no maintainer script runs here. Debian
+# ships its account databases nearly empty, so this fails on an image that skipped
+# base-passwd's masters.
+: > /tmp/probe
+chown root:root /tmp/probe
+
 echo "== apt-get install curl"
-apt-get update -qq
+# apt drops to `_apt` only when it can reach root's group by name; otherwise it warns
+# and fetches as root for the rest of the run.
+update=$(apt-get update -qq 2>&1) || { printf '%s\n' "$update" >&2; exit 1; }
+case "$update" in
+    *unsandboxed*) echo "apt could not drop privileges: $update" >&2; exit 1 ;;
+esac
 apt-get install -y -qq curl
 echo "== curl: $(curl --version | head -1)"
 

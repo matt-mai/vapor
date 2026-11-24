@@ -213,12 +213,17 @@ filesystem:
 - Passwords are always locked.
 - A user's primary `gid` must be declared (`user "app" requires primary gid 65532,
   which the image does not define`).
+- Images that carry `base-passwd` also get the distribution's own accounts (`root`,
+  `daemon`, `www-data`, …) copied from its master files, so package tooling that
+  resolves a name — `chown root:root`, apt's download directories — works. A record the
+  image already has is never displaced.
 
 ### timezone, ca, os-release
 
 - `timezone: UTC` works with no tzdata. Any real zone needs a tzdata slice.
 - `ca.mode` is `append` or `replace`; `ca.sources` are non-empty, unique,
-  relative paths to **single local files** beside the spec. They must parse as a
+  relative paths to **single local files**, which may sit above the spec
+  (`../ca/company.pem`) so images in one repository share the file. They must parse as a
   PEM bundle of public certificates. A directory source is refused, so a
   distribution CA bundle (Mozilla roots packed into
   `/etc/ssl/certs/ca-certificates.crt`) is not built with `filesystem.ca` — use a

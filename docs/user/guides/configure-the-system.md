@@ -63,6 +63,12 @@ Every ID is required and numeric. Vapor writes these accounts to `/etc/passwd`
 and `/etc/group` with a locked password marker, so they can never log in with a
 password.
 
+Debian and Ubuntu normally fill their account databases from `base-passwd` while the
+package is configured, which a build never does. Vapor copies that package's master
+files in, so an image also names `root`, `daemon`, `www-data` and the rest of the
+release's standard accounts. An account you declare is never replaced by one of them,
+and an image that carries no account files at all stays without an account database.
+
 `container.user` and `filesystem.accounts` are separate. Declaring an account
 does not change the user the image runs as, and a numeric `container.user` works
 without an account.

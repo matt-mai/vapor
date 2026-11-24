@@ -308,6 +308,18 @@ or that uid 42 already belongs to another account in the image. Rebuild to get t
 account; if the uid is taken, the warning stays and the download runs as root.
 
 ```text
+W: Download is performed unsandboxed as root as file '...' couldn't be accessed by user '_apt'. - pkgAcquire::Run (13: Permission denied)
+```
+
+`apt` drops to the unprivileged `_apt` user before downloading, and gives its download
+directories to `_apt` and to `root` while doing so. That chown needs gid 0 to have a
+name, which `base-passwd`'s install step provides. An image that ships the package's
+account files gets the record, so this warning means the image was built before Vapor
+wrote the standard accounts, or that gid 0 already belongs to another account in the
+image. Downloads still work, because signatures are verified either way; the only
+effect is that `apt` runs them as root. Rebuild to get the account.
+
+```text
 E: Unmet dependencies. Try 'apt --fix-broken install' with no packages (or specify a solution).
 ```
 

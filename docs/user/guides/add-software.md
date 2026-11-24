@@ -142,9 +142,10 @@ you declare yourself, and Vapor writes it deterministically:
   [configure the system](configure-the-system.md#users-and-groups));
 - files, directories and links: `filesystem.paths`;
 - timezone, certificates, release identity: the matching `filesystem` fields;
-- the package database, and the apt sandbox account (`_apt`) plus the source list
-  when `hardening.keep-package-sources` is on: Vapor writes these itself from the
-  verified package metadata, the same records the scripts would have produced.
+- the package database, the standard accounts `base-passwd` would install, the apt
+  sandbox account (`_apt`), and the source list when
+  `hardening.keep-package-sources` is on: Vapor writes these itself from the verified
+  package metadata, the same records the scripts would have produced.
 
 Anything else a script would have done is simply absent from the image. There is
 no list of accepted exceptions: a specification that tries to declare one is

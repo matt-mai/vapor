@@ -188,6 +188,25 @@ back to fetching as root with its warning. The group name follows the id the
 distribution fixed, so an image that names gid 65534 something other than `nogroup`
 joins the group it already has instead of gaining a second one with the same id.
 
+### Standard accounts
+
+`base-passwd` ships `/usr/share/base-passwd/{passwd,group}.master` and fills
+`/etc/passwd` and `/etc/group` from them in `postinst`. Without that step a Debian
+image names only what the specification declares, and anything that resolves an
+account by name fails: apt's `SetupAPTPartialDirectory` cannot chown its download
+directories to `root`, so it disables its own sandbox and fetches as root for the rest
+of the run, and `chown root:root` reports an unknown group.
+
+`BaseAccounts` copies the two masters into the databases, and writes one disabled
+`/etc/shadow` line per added account when the image ships a shadow file. The records
+are read from the masters the selected release ships rather than compiled in, so a
+release that changes an account changes the image. An image without `base-passwd`
+gains uid 0's two records, because a container has a superuser whether its account
+database names one or not; an image with no account data at all gains nothing.
+
+Like the sandbox account, a base account never displaces one the image already has: a
+taken name or id keeps its record even when the other half of the pair is free.
+
 ### Timezone
 
 Vapor writes `/etc/timezone` and resolves `/etc/localtime` through the image, so an

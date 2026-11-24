@@ -96,6 +96,19 @@ from `accounts.groups`; a gid the image does not define at all stops the build:
 vaporize: operation failed: accounts: user "app" requires primary gid 65532, which the image does not define
 ```
 
+## Standard accounts
+
+Debian and Ubuntu keep their account databases empty and fill them from
+`base-passwd`'s `passwd.master` and `group.master` while the package is being
+configured. Vapor does not run that step, so it copies the two master files into
+`/etc/passwd` and `/etc/group` itself, and does the same for `/etc/shadow` when the
+image ships one. An image therefore names `root`, `daemon`, `www-data` and the rest,
+exactly as the release defines them.
+
+An account the image already has keeps its record, so a declaration never fights the
+masters. An image without `base-passwd` — a static binary and nothing else — gains no
+account database at all.
+
 ## timezone
 
 ```yaml
