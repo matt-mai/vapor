@@ -37,11 +37,12 @@ type BaseAccountMasters struct {
 // free. An image that carries no account data at all gains none, so an image built to
 // hold a static binary keeps its empty root filesystem.
 //
-// The order is what makes each record resolve. The distribution's groups go in first so
-// a declared group keeps its name and id; declared users follow, because a declaration
-// may name a group either source supplied; the apt sandbox account comes next, since it
-// joins whatever group owns its gid; and the distribution's users come last, admitted
-// only against the group set the earlier passes produced.
+// The order is what makes each record resolve. Declared groups go in first so a
+// declaration keeps the name and id it asked for; the distribution's groups follow,
+// yielding to any declaration that took a name or id; declared users come next, because a
+// declaration may name a group either source supplied; the apt sandbox account follows,
+// since it joins whatever group owns its gid; and the distribution's users come last,
+// admitted only against the group set the earlier passes produced.
 func ApplyAccounts(tree *vfs.Tree, declared *filesystem.Accounts, packages []PackageState,
 	masters BaseAccountMasters,
 ) error {
@@ -52,16 +53,19 @@ func ApplyAccounts(tree *vfs.Tree, declared *filesystem.Accounts, packages []Pac
 	// Decided once, before any pass writes a file: a later pass must not see the
 	// databases an earlier one created and mistake them for the image's own account
 	// data. An image apt fetches in counts, because the sandbox account is about to give
-	// it a database either way.
-	carries := carriesAccounts(staged, masters) || aptFetches(staged, packages)
-	if err := addMasters(staged, masters.Group, groupFile, rootGroup(), nil, carries); err != nil {
-		return err
-	}
+	// it a database either way, and so does a declared account, which needs a database
+	// to be written into.
+	carries := carriesAccounts(staged, masters) || aptFetches(staged, packages) || declaresAccounts(declared)
 	accounts := filesystem.Accounts{}
 	if declared != nil {
 		accounts = *declared
 	}
+	// Declared groups go in before the masters so a declaration keeps the name and id it
+	// asked for, and a master group that would take either is the one that yields.
 	if err := applyGroups(staged, accounts.Groups); err != nil {
+		return err
+	}
+	if err := addMasters(staged, masters.Group, groupFile, rootGroup(), nil, carries); err != nil {
 		return err
 	}
 	if err := applyUsers(staged, accounts.Users); err != nil {
@@ -100,7 +104,7 @@ func addMasters(tree *vfs.Tree, master string, kind accountDatabaseFile, fallbac
 	if err != nil {
 		return err
 	}
-	added, err := mergeMaster(merged, records, master, groups)
+	added, err := mergeMaster(merged, records, kind, master, groups)
 	if err != nil {
 		return err
 	}
@@ -119,16 +123,18 @@ func addMasters(tree *vfs.Tree, master string, kind accountDatabaseFile, fallbac
 }
 
 // mergeMaster adds the records whose names and ids are free and reports their names,
-// which are how a caller tells an unchanged file from a rewritten one.
-func mergeMaster(merged *accountDatabase, records database, master string,
+// which are how a caller tells an unchanged file from a rewritten one. Only a passwd
+// record's password field is a credential, so only that master is held to it.
+func mergeMaster(merged *accountDatabase, records database, kind accountDatabaseFile, master string,
 	groups *accountDatabase,
 ) ([]string, error) {
 	var added []string
 	for _, record := range records {
 		if record.fields == nil {
 			// A comment or blank line is not an account, so it neither needs a free
-			// name nor may hold one: it is carried over as the file had it.
-			merged.records = append(merged.records, record)
+			// name nor may hold one. It is also not copied: a reader that treats it as a
+			// record would be reading a comment the master never meant to publish, and the
+			// image's own file keeps the comments it already had.
 			continue
 		}
 		if !merged.free(record) {
@@ -136,7 +142,7 @@ func mergeMaster(merged *accountDatabase, records database, master string,
 			// not this pass's to inspect.
 			continue
 		}
-		if !passwdDelegates(record) {
+		if kind.location == PasswdPath && !passwdDelegates(record) {
 			return nil, fmt.Errorf("base account %q in %s is not disabled; its password field must be %q",
 				record.name, master, DisabledPassword)
 		}
@@ -199,7 +205,7 @@ func keepShadowInStep(tree *vfs.Tree, names []string) error {
 		return err
 	}
 	for _, name := range names {
-		if err := ensureShadow(shadowed, name); err != nil {
+		if _, err := ensureShadow(shadowed, name); err != nil {
 			return err
 		}
 	}
@@ -226,6 +232,15 @@ func carriesAccounts(tree *vfs.Tree, masters BaseAccountMasters) bool {
 		}
 	}
 	return false
+}
+
+// declaresAccounts reports whether the specification declares an account at all.
+//
+// A declaration is written into a database, so an image that would otherwise carry none
+// still needs one: the accounts a specification names are not the convenience the
+// masters are, and skipping them would build an image that ignores what it declares.
+func declaresAccounts(declared *filesystem.Accounts) bool {
+	return declared != nil && (len(declared.Users) > 0 || len(declared.Groups) > 0)
 }
 
 // hasAccountRecords reports whether a database holds a real account, as opposed to the

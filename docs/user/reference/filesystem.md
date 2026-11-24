@@ -106,9 +106,14 @@ image ships one. An image therefore names `root`, `daemon`, `www-data` and the r
 exactly as the release defines them.
 
 An account the image already has keeps its record, so a declaration never fights the
-masters. A user whose group is not in the image is left out rather than recorded against
+masters. A declared group is written before the masters are merged, so a declaration
+takes the name or id it asked for and a master group that would collide is the one left
+out. A user whose group is not in the image is left out rather than recorded against
 a group that does not exist. An image without `base-passwd` — a static binary and
-nothing else — gains no account database at all.
+nothing else — gains no account database from the masters, but still gets one when the
+specification declares an account, because a declaration is not the convenience the
+masters are. Comments in a master file stay in the master: the image's own database is
+written only with the accounts it needs.
 
 ## timezone
 
