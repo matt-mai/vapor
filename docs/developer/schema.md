@@ -129,6 +129,15 @@ digest is not the only thing that has to stay stable. A trust key, CA source or 
 input may climb above the specification's directory (`../ca/ca.pem`) so images can
 share one file; an artifact path may not.
 
+**The specification is trusted input.** The climb is bounded by the ancestor the leading
+`..` components select, not by the repository the specification lives in: a spec is a
+program for the build, and whoever may write one may already choose which keys, which
+repository and which artifact digest the image is built from. Nothing here defends
+against an author who points a CA or key path at a file they can read; the confinement
+exists so a mistake reads a neighbouring directory rather than a host path. A tool that
+accepts specifications from people it does not trust has to restrict that first, for
+example by running the lock in a container that only mounts the workspace.
+
 **Existing digest inputs are frozen.** New opt-in fields can use the `omitzero`
 JSON tag option so the projection includes them only when set. A change that
 alters the projection of an existing spec needs a new digest version. Tests compare
