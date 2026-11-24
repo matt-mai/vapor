@@ -208,7 +208,7 @@ from `go.dev/dl`), take the artifact directly instead of hunting for a package.
    slashes, and may not point outside that directory. A `url` may not carry
    credentials, a query string or a fragment, but redirects are followed, so a
    `github.com/<owner>/<repo>/releases/download/...` link works — its 302 target
-   carries the signature in its query, and that is allowed.
+   carries the signature in its query, and that is allowed over HTTPS.
    `unpack: true` keeps the archive's own top directory and its modes, so expose
    a versioned binary with `filesystem.paths` symlinks.
 3. **Custom slices** — if no published slice fits, write `slices/<package>.yaml`

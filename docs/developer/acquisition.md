@@ -205,7 +205,14 @@ needs to see.
 A declared URL carries no query, but a redirect may: a server that signs its own
 asset URLs, like GitHub's release assets, puts the signature in the query of the
 302 target. So a redirect is checked for credentials, scheme and host rather than
-for a query, and its target is never recorded or printed.
+for a query, and its target is never recorded or printed. A target that carries a
+query must be HTTPS, because a signature in a plaintext URL is a published
+signature: verifying the payload's digest afterwards protects the bytes, not the
+proof that they were fetched.
+
+The fetch sends no `Referer`. Go would fill one in from the previous hop on every
+redirect, query included, and a signed asset URL signs itself with that query, so a
+second hop to another host would hand the first signature to a third party.
 
 The failure a user sees names the repository, the file and the status:
 
