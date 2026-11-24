@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+
+	"github.com/matt-mai/vapor/internal/schema/contents"
+	"github.com/matt-mai/vapor/internal/schema/lock"
 )
 
 // A package URL is how a scanner ties a component to vulnerability data, so it is the
@@ -37,6 +40,18 @@ func packageURL(vendor, release, name, version, arch, upstream string) string {
 
 // artifactURL identifies an artifact by the upstream identity its specification
 // declares. It is not a distribution package, so it carries no distro qualifier.
+// vendorNamespace decides which namespace a package from a repository is published under.
+// A repository that authenticates its own release identity publishes packages the base
+// distribution never built, so they carry the vendor's namespace and the vendor's
+// release; anything else carries the distribution's. Both attestation documents ask this
+// question, so they ask it here and cannot answer differently.
+func vendorNamespace(record *lock.Repository, distro, release string) (string, string) {
+	if record == nil || record.Identity != contents.RepositoryIdentityOwn {
+		return distro, release
+	}
+	return record.Name, record.Suite
+}
+
 func artifactURL(name, version string) string {
 	return "pkg:generic/" + purlEscape(name) + "@" + purlEscape(version)
 }
@@ -70,6 +85,9 @@ type product struct {
 	qualifiers map[string]string
 	// raw is the URL the product was read from, so rendering it back is lossless.
 	raw string
+	// cpe is the advisory-database name a document states beside the URL, which a
+	// scanner needs for a package its own index files nothing under.
+	cpe string
 }
 
 // url returns the package URL this product is identified by.

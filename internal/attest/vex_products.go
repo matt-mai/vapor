@@ -2,8 +2,6 @@ package attest
 
 import (
 	"fmt"
-
-	"github.com/matt-mai/vapor/internal/schema/contents"
 )
 
 // targets the package, and a reader matching against its SBOM has that same name.
@@ -72,13 +70,12 @@ func (input *VEXInput) deb(repository, name, version, arch, upstream string) ([]
 // vendor's own for a repository that authenticates its own release identity.
 func (input *VEXInput) vendorOf(repository string) (string, string) {
 	for position := range input.Repositories {
-		record := &input.Repositories[position]
-		if record.Platform == input.Platform && record.ID == repository &&
-			record.Identity == contents.RepositoryIdentityOwn {
-			return record.Name, record.Suite
+		if record := &input.Repositories[position]; record.ID == repository &&
+			record.Platform == input.Platform {
+			return vendorNamespace(record, input.Distro, input.Release)
 		}
 	}
-	return input.Distro, input.Release
+	return vendorNamespace(nil, input.Distro, input.Release)
 }
 
 // importProducts matches each product an imported statement names to the lock.
@@ -89,74 +86,111 @@ func (input *VEXInput) importProducts(statement *VEXStatement) ([]product, error
 	}
 	resolved := make([]product, 0, len(statement.Products))
 	for position := range statement.Products {
-		named := statement.Products[position].purl()
-		parsed, err := parseProduct(named)
+		component := &statement.Products[position]
+		parsed, err := input.importProduct(component, known)
 		if err != nil {
-			return nil, err
-		}
-		if err := checkEligible(&parsed, input.Platform, known); err != nil {
 			return nil, err
 		}
 		matches := known.matching(&parsed)
 		if len(matches) == 0 {
-			return nil, fmt.Errorf("product %q is not in the lock for %s", named, input.Platform)
+			return nil, fmt.Errorf("product %q is not in the lock for %s", parsed.raw, input.Platform)
 		}
 		resolved = append(resolved, matches...)
 	}
 	return resolved, nil
 }
 
-// productSet is every product this platform's lock can supply.
+// importProduct reads one imported product. The CPE a document states beside the purl is
+// the identity that names a vendor package in an advisory database, so it is carried into
+// the resolved product and published again with the claim; a document Vapor wrote can
+// therefore be imported unchanged.
+func (input *VEXInput) importProduct(component *VEXComponent, known productSet) (product, error) {
+	named := component.purl()
+	parsed, err := parseProduct(named)
+	if err != nil {
+		return product{}, err
+	}
+	if err := checkEligible(&parsed, input.Platform, known); err != nil {
+		return product{}, err
+	}
+	parsed.cpe = component.Identifiers["cpe"]
+	return parsed, nil
+}
+
+// matching returns the locked products an imported one names.
 type productSet []product
 
 func (input *VEXInput) knownProducts() (productSet, error) {
 	urls := input.lockProductURLs()
 	found := make(productSet, 0, len(urls))
 	for _, url := range urls {
-		built, err := parseProduct(url)
+		built, err := parseProduct(url.url)
 		if err != nil {
 			return nil, err
 		}
+		built.cpe = url.cpe
 		found = append(found, built)
 	}
 	return found, nil
 }
 
-// lockProductURLs renders every product this platform's lock names.
-func (input *VEXInput) lockProductURLs() []string {
-	urls := make([]string, 0, len(input.Packages)+len(input.Slices)+len(input.Artifacts))
+// lockProductURLs renders every product this platform's lock names, with the CPE its
+// record declares. A package and a slice are identified by their URL and an artifact by
+// its published name, which is the same pairing each payload writes.
+func (input *VEXInput) lockProductURLs() []productURL {
+	urls := make([]productURL, 0, len(input.Packages)+len(input.Slices)+len(input.Artifacts))
 	for position := range input.Packages {
 		record := &input.Packages[position]
 		if record.Platform == input.Platform {
 			vendor, release := input.vendorOf(record.Repository)
-			urls = append(urls, packageURL(vendor, release,
-				record.Name, record.Version, record.Architecture, record.Source))
+			urls = append(urls, withCPE(packageURL(vendor, release,
+				record.Name, record.Version, record.Architecture, record.Source),
+				declaredCPE(record.CPE, record.Version)))
 		}
 	}
 	for position := range input.Slices {
 		record := &input.Slices[position]
 		if record.Platform == input.Platform {
 			vendor, release := input.vendorOf(record.Repository)
-			urls = append(urls, packageURL(vendor, release,
-				record.Package, record.Version, record.Architecture, record.Source))
+			urls = append(urls, withCPE(packageURL(vendor, release,
+				record.Package, record.Version, record.Architecture, record.Source),
+				declaredCPE(record.CPE, record.Version)))
 		}
 	}
 	for position := range input.Artifacts {
 		record := &input.Artifacts[position]
 		if record.Platform == input.Platform && record.SBOM.Name != "" {
-			urls = append(urls, artifactURL(record.SBOM.Name, record.SBOM.Version))
+			urls = append(urls, withCPE(artifactURL(record.SBOM.Name, record.SBOM.Version),
+				declaredCPE(record.SBOM.CPE, record.SBOM.Version)))
 		}
 	}
 	return urls
 }
 
-// matching returns the locked products an imported one names.
+// withCPE pairs a package URL with the CPE its lock record declares.
+func withCPE(url, cpe string) productURL {
+	return productURL{url: url, cpe: cpe}
+}
+
+// productURL is one locked identity: the URL a reader matches by and the declared CPE
+// the payload states beside it.
+type productURL struct {
+	url string
+	cpe string
+}
+
+// matching returns the locked products an imported one names. The CPE a document states
+// is the document's own identity for the product, so it replaces the lock's rather than
+// being compared: a lock record without one is a product Vapor could not name, and a
+// document naming it is the source of the name.
 func (known productSet) matching(named *product) []product {
 	found := make([]product, 0, 2)
 	for _, candidate := range known {
-		if named.covers(&candidate) {
-			found = append(found, candidate)
+		if !named.covers(&candidate) {
+			continue
 		}
+		candidate.cpe = named.cpe
+		found = append(found, candidate)
 	}
 	return found
 }

@@ -82,6 +82,13 @@ func verifyLockPackageRepository(pkg *Package, spec *schemaSpec.Spec, repositori
 }
 
 func verifyLockPackageRequests(spec *schemaSpec.Spec, packages map[lockPackageKey]*Package) error {
+	declared := make(map[string]string, len(spec.Contents.Packages))
+	for _, request := range spec.Contents.Packages {
+		declared[request.Name] = request.CPE
+		if err := agreeOnPackageCPE(declared, request); err != nil {
+			return err
+		}
+	}
 	for _, request := range spec.Contents.Packages {
 		for _, platform := range spec.Platforms {
 			pkg, ok := packages[lockPackageKey{platform: platform, name: request.Name}]
@@ -92,6 +99,33 @@ func verifyLockPackageRequests(spec *schemaSpec.Spec, packages map[lockPackageKe
 				return err
 			}
 		}
+	}
+	return verifyPackageCPEs(declared, packages)
+}
+
+// verifyPackageCPEs compares every record with the CPE the requests for its package
+// declared, which a dependency has none of.
+func verifyPackageCPEs(declared map[string]string, packages map[lockPackageKey]*Package) error {
+	for key, pkg := range packages {
+		if pkg.CPE != declared[key.name] {
+			return fmt.Errorf("lock packages: package %q cpe does not match the specification on %s",
+				key.name, key.platform)
+		}
+	}
+	return nil
+}
+
+// agreeOnPackageCPE refuses two requests for one package that state different CPEs. A
+// package is one element in the attestation document, so its requests have to agree on
+// the identity that document publishes.
+func agreeOnPackageCPE(declared map[string]string, request contents.PackageRequest) error {
+	first, seen := declared[request.Name]
+	if !seen {
+		declared[request.Name] = request.CPE
+		return nil
+	}
+	if first != request.CPE {
+		return fmt.Errorf("lock packages: requests for %q declare different CPEs", request.Name)
 	}
 	return nil
 }

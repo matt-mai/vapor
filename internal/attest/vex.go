@@ -62,10 +62,13 @@ type vexPayloadVulnerability struct {
 	Name string `json:"name"`
 }
 
-// vexPayloadProduct identifies a product by its package URL alone, the only identity
-// Vapor can check and the same one the SPDX document writes.
+// vexPayloadProduct identifies a product by its package URL, the identity Vapor checks
+// the lock against and the same one the SPDX document writes. Identifiers carries the
+// declared CPE beside it, because a vendor package's advisories are filed under a name
+// its purl cannot reach.
 type vexPayloadProduct struct {
-	ID string `json:"@id"`
+	ID          string            `json:"@id"`
+	Identifiers map[string]string `json:"identifiers,omitempty"`
 }
 
 func (input *VEXInput) document() (vexPayloadDocument, error) {
@@ -88,7 +91,7 @@ func (input *VEXInput) document() (vexPayloadDocument, error) {
 		return vexPayloadDocument{}, ErrNoClaims
 	}
 	for position := range claims {
-		document.Statements = append(document.Statements, statementOf(&claims[position]))
+		document.Statements = append(document.Statements, input.statementOf(&claims[position]))
 	}
 	return document, nil
 }
@@ -142,7 +145,7 @@ func claimOrder(claim *Claim) string {
 // statementOf renders one claim. The claim's own text is published in the field OpenVEX
 // defines for its status: an affected claim states the action a reader has to take, which
 // the schema requires, and every other status states its impact.
-func statementOf(claim *Claim) vexPayloadStatement {
+func (input *VEXInput) statementOf(claim *Claim) vexPayloadStatement {
 	rendered := vexPayloadStatement{
 		Vulnerability: vexPayloadVulnerability{Name: claim.Vulnerability},
 		Products:      make([]vexPayloadProduct, 0, len(claim.Products)),
@@ -156,9 +159,33 @@ func statementOf(claim *Claim) vexPayloadStatement {
 		rendered.ImpactStatement = claim.Statement
 	}
 	for _, product := range claim.Products {
-		rendered.Products = append(rendered.Products, vexPayloadProduct{ID: product})
+		rendered.Products = append(rendered.Products, vexPayloadProduct{ID: product,
+			Identifiers: input.identifiers(product)})
 	}
 	return rendered
+}
+
+// identifiers is the OpenVEX identifier map for one product URL of a resolved claim. The
+// URL identifies the product; a CPE the lock record declares names it in an advisory
+// database the URL cannot reach, so it is published beside the URL rather than instead.
+func (input *VEXInput) identifiers(url string) map[string]string {
+	cpe := input.lockCPE(url)
+	if cpe == "" {
+		return nil
+	}
+	return map[string]string{"purl": url, "cpe": cpe}
+}
+
+// lockCPE returns the CPE this platform's lock declares for a product URL, resolved
+// against the version it recorded so a `*` declaration names the locked version here as
+// it does in the SPDX document.
+func (input *VEXInput) lockCPE(url string) string {
+	for _, candidate := range input.lockProductURLs() {
+		if candidate.url == url {
+			return candidate.cpe
+		}
+	}
+	return ""
 }
 
 // evidence is what this input can check a claim against.

@@ -222,6 +222,25 @@ func verifyLockSliceRequests(spec *schemaSpec.Spec, expected map[string]sliceExp
 			}
 		}
 	}
+	return verifySliceCPEs(expected, slicesByKey)
+}
+
+// verifySliceCPEs compares every slice record with the CPE the requests for its package
+// declared. A slice pulled in only as a dependency has no request to compare against, so
+// its record has to state no CPE at all: any name there would attribute the package to an
+// identity the specification never declared.
+func verifySliceCPEs(expected map[string]sliceExpectation, slicesByKey map[lockSliceKey]*Slice) error {
+	for key, slice := range slicesByKey {
+		want, requested := expected[key.pkg]
+		switch {
+		case !requested && slice.CPE != "":
+			return fmt.Errorf("lock slices: package %q cpe is not declared by the specification on %s",
+				key.pkg, key.platform)
+		case requested && slice.CPE != want.cpe:
+			return fmt.Errorf("lock slices: package %q cpe does not match the specification on %s",
+				key.pkg, key.platform)
+		}
+	}
 	return nil
 }
 
@@ -239,8 +258,11 @@ func sliceExpectations(spec *schemaSpec.Spec) (map[string]sliceExpectation, erro
 }
 
 // mergeSliceExpectation folds one slice request into what the package's earlier requests
-// already asked for. Two requests for one package have to agree on the catalogue and the
-// declared CPE, because one package is one element in the document.
+// already asked for. Two requests for one package have to agree on the catalogue, because
+// one package is one element in the document. The CPE is carried as the requests stated
+// it, so a request that omits the field clears an earlier declaration rather than
+// quietly inheriting it; spec validation refuses that disagreement before a lock exists,
+// and this record has to match what the specification says.
 func mergeSliceExpectation(want sliceExpectation, request contents.SliceRequest,
 	seen bool) (sliceExpectation, error) {
 	if request.Catalogue == nil {
@@ -255,13 +277,7 @@ func mergeSliceExpectation(want sliceExpectation, request contents.SliceRequest,
 	if request.Version != nil {
 		want.version = deb.JoinExpressions(want.version, *request.Version)
 	}
-	if request.CPE != "" {
-		if want.cpe != "" && want.cpe != request.CPE {
-			return want, fmt.Errorf("lock slices: requests for %q declare different CPEs",
-				request.Package)
-		}
-		want.cpe = request.CPE
-	}
+	want.cpe = request.CPE
 	return want, nil
 }
 

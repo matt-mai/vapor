@@ -11,7 +11,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/matt-mai/vapor/internal/schema/contents"
 	"github.com/matt-mai/vapor/internal/schema/lock"
 	"github.com/matt-mai/vapor/internal/vfs"
 )
@@ -385,11 +384,7 @@ func (index locked) sliceElement(path string, origin vfs.Origin) (*element, erro
 // distribution ships, and the distribution's advisories for the name describe its own
 // build of it rather than this one.
 func (index locked) vendorOf(repository string) (string, string) {
-	found, ok := index.repositories[repository]
-	if !ok || found.Identity != contents.RepositoryIdentityOwn {
-		return index.distro, index.release
-	}
-	return found.Name, found.Suite
+	return vendorNamespace(index.repositories[repository], index.distro, index.release)
 }
 
 // packageElement describes one whole package payload.

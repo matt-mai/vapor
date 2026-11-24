@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -63,6 +64,10 @@ func cachedBytes(t *testing.T, dir, digest string, size int64) []byte {
 	}
 	return data
 }
+
+type storeFunc func(io.Reader, string, int64) error
+
+func (f storeFunc) Store(r io.Reader, digest string, size int64) error { return f(r, digest, size) }
 
 func assertNotCached(t *testing.T, dir, digest string) {
 	t.Helper()
@@ -207,6 +212,37 @@ func TestPackagesFetchFailureIsRedacted(t *testing.T) {
 
 // A failure whose text Vapor composed itself names no request, so it is printed
 // instead of the blanket redaction a transport error needs.
+// A store that runs out of time on a downloaded artifact reports the cache, not the
+// download: the bytes were fetched, verified and rewound before the store saw them, so
+// calling this a timed-out download sends the reader looking at the origin.
+func TestArtifactStoreDeadlineIsNotADownloadTimeout(t *testing.T) {
+	payload := []byte("artifact bytes")
+	store := storeFunc(func(io.Reader, string, int64) error {
+		return fmt.Errorf("publish blob: %w", context.DeadlineExceeded)
+	})
+	fetcher := fetchFunc(func(context.Context, string) (io.ReadCloser, error) {
+		return nopCloser(bytes.NewReader(payload)), nil
+	})
+	unpack := contents.ArtifactUnpackStandalone
+	artifact := contents.Artifact{Name: "one", Unpack: &unpack, Dest: "/usr/share/one",
+		Sources: []contents.ArtifactSource{{Platforms: []string{"linux/amd64"},
+			URL: "https://example.com/one", SHA256: digestOf(payload)}}}
+	_, err := acquire.Artifacts(t.Context(), fetcher, nil, store,
+		[]contents.Artifact{artifact}, []string{"linux/amd64"}, nil)
+	if err == nil {
+		t.Fatal("a store failure was accepted")
+	}
+	if strings.Contains(err.Error(), "download failed") {
+		t.Fatalf("error = %q, want the store cause", err)
+	}
+	if !strings.Contains(err.Error(), "store downloaded artifact") {
+		t.Fatalf("error = %q, want it to name the store", err)
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("cause is not preserved: %v", err)
+	}
+}
+
 func TestArtifactFailureNamesASafeCause(t *testing.T) {
 	for _, test := range []struct {
 		status int
