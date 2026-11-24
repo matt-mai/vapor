@@ -343,6 +343,10 @@ The CPE has to be a CPE 2.3 name: thirteen colon-separated fields starting
 wildcards. Leave it out when the payload is a package, because a package's name,
 version and distribution are enough.
 
+Two artifacts that name the same `sbom.name` and `sbom.version` on the same platform
+must declare the same CPE: a claim names a product by its name and version, so one
+product with two advisory names cannot be reported.
+
 ### Naming a vendor package for a scanner
 
 A package from a vendor archive is published as that vendor's package, so a scanner

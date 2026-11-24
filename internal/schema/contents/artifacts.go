@@ -32,7 +32,7 @@ func validateCPENamed(value, field string) error {
 	if strings.ContainsAny(value, " \t\r\n") {
 		return fmt.Errorf("%s must be a CPE 2.3 name without whitespace", field)
 	}
-	fields := strings.Split(value, ":")
+	fields := SplitCPE(value)
 	if len(fields) != 13 || fields[0] != "cpe" || fields[1] != "2.3" {
 		return fmt.Errorf("%s must be a CPE 2.3 name such as "+
 			"cpe:2.3:a:vendor:product:version:*:*:*:*:*:*:*", field)
@@ -48,6 +48,7 @@ func validateCPENamed(value, field string) error {
 
 func validateArtifacts(artifacts []Artifact, platforms []string) error {
 	seen := make(map[string]bool)
+	identities := make(map[string]string)
 	for i := range artifacts {
 		artifact := &artifacts[i]
 		if seen[artifact.Name] {
@@ -57,6 +58,24 @@ func validateArtifacts(artifacts []Artifact, platforms []string) error {
 		if err := validateArtifact(artifact, platforms); err != nil {
 			return fmt.Errorf("contents.artifacts[%d]: %w", i, err)
 		}
+		if err := agreeOnArtifactIdentity(identities, artifact); err != nil {
+			return fmt.Errorf("contents.artifacts[%d]: %w", i, err)
+		}
+	}
+	return nil
+}
+
+// agreeOnArtifactIdentity refuses two artifacts that share one platform and one purl but
+// declare different CPEs. A claim names a product by its purl, and the CPE is the
+// advisory-database name published beside it, so one purl with two names would put a
+// claim under whichever name came first.
+func agreeOnArtifactIdentity(identities map[string]string, artifact *Artifact) error {
+	for _, platform := range artifact.Platforms {
+		key := platform + "\x00" + artifact.SBOM.Name + "@" + artifact.SBOM.Version
+		if first, seen := identities[key]; seen && first != artifact.SBOM.CPE {
+			return fmt.Errorf("artifacts %q declare different CPEs for one identity", artifact.Name)
+		}
+		identities[key] = artifact.SBOM.CPE
 	}
 	return nil
 }
