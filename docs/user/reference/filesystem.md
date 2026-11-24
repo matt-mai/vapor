@@ -128,8 +128,10 @@ filesystem:
 | `mode`    | Required: `append` keeps the package roots and adds yours, `replace` uses only yours. |
 | `sources` | Required nonempty list of local certificate files.                                    |
 
-Sources are paths relative to the specification file. They must hold public
-certificates; a file with a private key fails the lock. Duplicates are written
+Sources are paths relative to the specification file. They may climb above it, so
+several images can share one file: `sources: [../../ca/company.pem]` reads a
+certificate kept beside the images rather than beside one of them. They must hold
+public certificates; a file with a private key fails the lock. Duplicates are written
 once, in declaration order.
 
 `replace` with no sources is refused. Appending to an image whose packages provide

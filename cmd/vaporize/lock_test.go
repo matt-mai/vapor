@@ -326,7 +326,7 @@ platforms: [linux/amd64]
 contents:
   catalogues:
     - name: local
-      path: catalogue
+      path: ../catalogue
       archives: {ubuntu: main}
   slices:
     - package: base-files
@@ -340,11 +340,16 @@ contents:
           url: %s
       trust:
         keys:
-          - path: keys/test.asc
+          - path: ../keys/test.asc
             fingerprints: [%s]
 `, server.URL, hex.EncodeToString(entity.PrimaryKey.Fingerprint))
 
-	specPath := filepath.Join(dir, "image.yaml")
+	// The spec lives in its own directory and names the key, the catalogue and the
+	// lock stays beside it, so a trust key declared above the spec is covered.
+	specPath := filepath.Join(dir, "app", "image.yaml")
+	if mkdirErr := os.MkdirAll(filepath.Dir(specPath), 0o700); mkdirErr != nil {
+		t.Fatal(mkdirErr)
+	}
 	if writeErr := os.WriteFile(specPath, []byte(specText), 0o600); writeErr != nil {
 		t.Fatal(writeErr)
 	}
@@ -354,12 +359,15 @@ contents:
 	if code != 0 {
 		t.Fatalf("lock code=%d stderr=%q", code, stderr.String())
 	}
-	lockData, err := os.ReadFile(filepath.Join(dir, "image.lock.yaml"))
+	lockData, err := os.ReadFile(filepath.Join(dir, "app", "image.lock.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(string(lockData), "base-files") || !strings.Contains(string(lockData), "data") {
 		t.Fatalf("lock missing slice evidence:\n%s", lockData)
+	}
+	if !strings.Contains(string(lockData), "path: ../keys/test.asc") {
+		t.Fatalf("lock does not record the key above the spec:\n%s", lockData)
 	}
 }
 

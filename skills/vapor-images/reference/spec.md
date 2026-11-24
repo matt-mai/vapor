@@ -66,8 +66,9 @@ repositories:
 ```
 
 - Endpoints must cover every platform the repository is used on.
-- Trust key paths are relative files beside the spec, and must be unique. Short
-  key IDs are refused; fingerprints are 40 or 64 hex characters.
+- Trust key paths are relative files, unique, and may sit above the spec
+  (`../keys/repo.asc`). Short key IDs are refused; fingerprints are 40 or 64 hex
+  characters.
 - A `trust` block **replaces** the built-in trust, it never merges with it.
 - Both distros have a built-in main archive, so `repositories` is often
   unnecessary. See `distros.md`.
@@ -263,5 +264,8 @@ local inputs and explicit vulnerability claims; it is optional and rarely needed
 
 Every path a spec mentions — catalogue `path`, artifact source `path`, trust key
 `path`, `ca.sources`, `vex.inputs` — is relative to the directory holding
-`image.yaml`, slash-separated, clean, and confined to that directory. All are
-snapshotted and hashed into the lock at `lock` time, so builds stay offline.
+`image.yaml`, slash-separated and clean. All are snapshotted and hashed into the
+lock at `lock` time, so builds stay offline. A trust key, `ca.sources` and
+`vex.inputs` may climb above the spec with `../` and stay confined to the ancestor
+they climb to; an artifact source `path` and a catalogue `path` may not leave the
+spec's own directory.

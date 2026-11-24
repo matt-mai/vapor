@@ -253,6 +253,10 @@ you.
 default keys for that repository instead of adding to them. Every listed key file
 must contain every listed fingerprint, and private key material is refused.
 
+A key `path` is relative to the specification file like a `ca.sources` entry, so it
+may climb above it: `path: ../../keys/archive.asc` lets several images share one key
+file.
+
 `by-hash: require` fails the lock when the server does not offer by-hash
 downloads. `freshness.valid-until: require` fails the lock when the metadata has
 no expiry date, while `if-present` checks the date only when one is supplied.
@@ -302,9 +306,9 @@ needs a source, and the sources must cover each platform exactly once. One sourc
 can cover several platforms with the same bytes.
 
 A source names its payload one way. `url` downloads it. `path` reads a file
-relative to the specification's directory, with the same confinement as a
-catalogue's `path`: the file must be a regular file inside that directory, and a
-path that escapes it is refused. A local payload is still copied into the cache at
+relative to the specification's directory: the file must be a regular file inside
+that directory, and a path that climbs out of it — including `../` — is refused,
+because a payload becomes image content. A local payload is still copied into the cache at
 lock time, so a later build needs neither the file nor the network.
 
 ```yaml

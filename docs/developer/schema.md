@@ -123,9 +123,11 @@ The projection rules:
 `contents.catalogues[].path`, `contents.repositories[].trust.keys[].path`,
 `filesystem.ca.sources[]` and `vex.inputs[]`. These must be relative paths. A
 specification that could name `/etc/shadow` or an absolute host path would be a way
-to make a build read things it should never read. Resolution happens later, inside
-the specification's directory, and the referenced bytes are snapshotted so the
-digest is not the only thing that has to stay stable.
+to make a build read things it should never read. Resolution happens later, relative
+to the specification's directory, and the referenced bytes are snapshotted so the
+digest is not the only thing that has to stay stable. A trust key, CA source or VEX
+input may climb above the specification's directory (`../ca/ca.pem`) so images can
+share one file; an artifact path may not.
 
 **Existing digest inputs are frozen.** New opt-in fields can use the `omitzero`
 JSON tag option so the projection includes them only when set. A change that
