@@ -277,6 +277,11 @@ holds the matching rules; see [distribution](distribution.md#pro-archives).
   bytes whose content is still unknown.
 - The cache trusts its own directory. Local state under `0700` is the boundary; Vapor
   does not defend the cache against someone who can already write to it.
+- The specification is trusted. A trust key, CA source or VEX input may name a file above
+  the specification's directory, and the ancestor it names is the confinement. An author
+  who may write a specification already chooses the keys, the repositories and the
+  artifact digests, so nothing here is a defence against that author. The assumption
+  itself is recorded in [the schema notes](schema.md).
 - Acquisition does not extract. Extraction is a separate operation with its own bounds,
   so a bug in a decoder cannot reach the network and a network bug cannot reach the
   image tree.
