@@ -132,15 +132,10 @@ func snapshotInputs(specDir string, declarations []declaration, store Store) ([]
 	if len(declarations) == 0 {
 		return []lock.LocalInput{}, nil
 	}
-	root, err := os.OpenRoot(specDir)
-	if err != nil {
-		return nil, errors.New("open spec directory failed")
-	}
-	defer func() { _ = root.Close() }()
 	result := make([]lock.LocalInput, 0, len(declarations))
 	for i := range declarations {
 		item := &declarations[i]
-		data, err := readLocalFile(root, item.path)
+		data, err := readLocalFile(specDir, item.path)
 		if err != nil {
 			return nil, fmt.Errorf("%s input %q: %w", item.role, item.path, err)
 		}
@@ -162,11 +157,24 @@ func snapshotInputs(specDir string, declarations []declaration, store Store) ([]
 	return result, nil
 }
 
-func readLocalFile(root *os.Root, declaredPath string) ([]byte, error) {
+func readLocalFile(specDir, declaredPath string) ([]byte, error) {
 	if err := base.ValidateLocalPath(declaredPath); err != nil {
 		return nil, err
 	}
-	name := filepath.FromSlash(declaredPath)
+	// A trust input may be shared between images, so it may be declared above the
+	// specification directory. The root is the ancestor the path climbs to, which
+	// keeps every open below it confined to that ancestor.
+	parts := strings.Split(declaredPath, "/")
+	climb := 0
+	for climb < len(parts) && parts[climb] == ".." {
+		climb++
+	}
+	root, err := os.OpenRoot(filepath.Join(specDir, filepath.FromSlash(strings.Join(parts[:climb], "/"))))
+	if err != nil {
+		return nil, errors.New("open spec directory failed")
+	}
+	defer func() { _ = root.Close() }()
+	name := filepath.FromSlash(strings.Join(parts[climb:], "/"))
 	info, err := root.Stat(name)
 	if err != nil {
 		return nil, errors.New("inspect input failed")

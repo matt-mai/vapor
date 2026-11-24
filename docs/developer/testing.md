@@ -261,7 +261,9 @@ local file, so the runner pins a hash it computed from the bytes it just handed 
 build. The staged files are copied into a `files/` directory beside each rendered spec,
 because an artifact `path` may not leave the spec's own directory. The runner also
 swaps the remote catalogue URL for the checked-out copy, which keeps the lock on local
-bytes instead of re-fetching Git for every image.
+bytes instead of re-fetching Git for every image. The test certificate authority sits one
+directory above each rendered spec, so `runtime-packages` names it as
+`../ca/e2e-ca.pem` and the run covers a CA source that is shared above its spec.
 
 Local paths are the normal shape, and the suite uses them for everything it generates:
 application scripts, the test binaries and the throwaway certificates. One artifact is

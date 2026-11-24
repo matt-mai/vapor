@@ -237,6 +237,59 @@ func TestSnapshotRejectsMissingInputs(t *testing.T) {
 	}
 }
 
+func TestSnapshotReadsTrustInputsAboveTheSpecDirectory(t *testing.T) {
+	base := t.TempDir()
+	certificate := selfSignedCertificate(t, "ca")
+	writeFile(t, base, "ca/ca.pem", certificate)
+	writeFile(t, base, "keys/archive.asc", readFixture(t,
+		filepath.Join("..", "distro", "ubuntu", "keys", "ubuntu-archive-key-2018.asc")))
+	writeFile(t, base, "vex/review.json", []byte(`{"statements":[]}`))
+	writeFile(t, base, "images/app/catalogues/local/chisel.yaml", []byte("format: chisel-v3\n"))
+	specDir := filepath.Join(base, "images", "app")
+	if err := os.MkdirAll(specDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	specification := snapshotSpec()
+	specification.Contents.Repositories[0].Trust.Keys[0].Path = "../../keys/archive.asc"
+	specification.Filesystem.CA.Sources = []string{"../../ca/ca.pem"}
+	specification.VEX.Inputs = []string{"../../vex/review.json"}
+	result, err := snapshot.Snapshot(specDir, specification, newStore(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []struct{ role, path string }{
+		{"ca", "../../ca/ca.pem"},
+		{"trust-key", "../../keys/archive.asc"},
+		{"vex", "../../vex/review.json"},
+	}
+	if len(result.Inputs) != len(want) {
+		t.Fatalf("inputs = %+v", result.Inputs)
+	}
+	for i, item := range want {
+		if result.Inputs[i].Role != item.role || result.Inputs[i].Path != item.path ||
+			result.Inputs[i].Size <= 0 {
+			t.Fatalf("input[%d] = %+v", i, result.Inputs[i])
+		}
+	}
+}
+
+func TestSnapshotRefusesAnInputThatLeavesTheClimbedAncestor(t *testing.T) {
+	base := t.TempDir()
+	writeFile(t, base, "ca/ca.pem", selfSignedCertificate(t, "ca"))
+	if err := os.Symlink("/etc/passwd", filepath.Join(base, "ca", "link.pem")); err != nil {
+		t.Fatal(err)
+	}
+	specDir := filepath.Join(base, "images", "app")
+	if err := os.MkdirAll(specDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	specification := caOnlySpec()
+	specification.Filesystem.CA.Sources = []string{"../../ca/link.pem"}
+	if _, err := snapshot.Snapshot(specDir, specification, newStore(t)); err == nil {
+		t.Fatal("a symlink out of the climbed ancestor was accepted")
+	}
+}
+
 func TestSnapshotKeepsRolesSeparateForSamePath(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "shared.pem", selfSignedCertificate(t, "shared"))

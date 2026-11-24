@@ -138,10 +138,11 @@ vex:
 filesystem:
   ca:
     # Two sources: the public roots from a bundle pinned by hash in the rendered
-    # spec, and the certificate authority run.sh just created. append keeps the
-    # order the sources are declared in.
+    # spec, and the certificate authority run.sh just created. That root is declared
+    # one directory above this spec, which is how a spec shares an input with the
+    # images beside it. append keeps the order the sources are declared in.
     mode: append
-    sources: [certs/cacert.pem, certs/e2e-ca.pem]
+    sources: [certs/cacert.pem, ../ca/e2e-ca.pem]
   accounts:
     groups:
       - name: app

@@ -123,7 +123,9 @@ log "packing the Vapor sources"
     go.mod go.sum cmd internal)
 
 # A throwaway certificate authority for the CA image. Nothing here outlives the work
-# directory, and the images built from it are the only place it is trusted.
+# directory, and the images built from it are the only place it is trusted. It sits
+# beside the rendered spec directories, so runtime-packages declares it as
+# ../ca/e2e-ca.pem: the e2e run covers a CA source that lives above its spec.
 log "creating a test certificate authority"
 ca_dir="$work/ca"
 rm -rf "$ca_dir"
@@ -153,8 +155,8 @@ openssl x509 -req -in "$ca_dir/server.csr" -CA "$ca_dir/e2e-ca.pem" -CAkey "$ca_
 chmod 0644 "$ca_dir/e2e-ca.pem" "$ca_dir/server.pem" "$ca_dir/untrusted.pem"
 chmod 0600 "$ca_dir/server.key"
 
-# Every local artifact lives beside the spec that names it, in a `files/` directory: the
-# loader refuses a path that leaves the spec's own directory, so each rendered spec gets
+# Every local artifact lives beside the spec that names it, in a `files/` directory: an
+# artifact payload may not leave the spec's own directory, so each rendered spec gets
 # its own copy. Staging once keeps the specs free of a listening port and makes a path
 # source read the same bytes the hash was computed from.
 log "staging the local inputs"
@@ -188,7 +190,6 @@ render() {
         mkdir -p "$directory/certs"
         curl -sfL --max-time 60 "$ca_bundle_url" -o "$directory/certs/cacert.pem" ||
             fail "could not download the CA bundle from $ca_bundle_url"
-        cp "$ca_dir/e2e-ca.pem" "$directory/certs/e2e-ca.pem"
     fi
     stamp "$target"
 }

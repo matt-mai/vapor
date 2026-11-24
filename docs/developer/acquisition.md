@@ -142,9 +142,13 @@ have that window.
 | CA | PEM public certificates; every block parsed; no private keys, no other block types; text outside a block accepted only as a `#` comment, a blank line or a heading underlined with repeated punctuation, and anything else refused |
 | VEX | bytes retained as-is |
 
-The snapshot is taken through the specification's directory, so only regular files
-inside it are reachable. `..` is allowed while it stays inside. A symlink that escapes
-the directory is rejected. Each file is bounded at 64 MiB.
+The snapshot is taken relative to the specification's directory. A path may climb above
+it, because images in a repository share a key directory or a CA file, so
+`../ca/ca.pem` resolves. The climb itself is the root: a leading run of `..` is applied
+to the directory name and everything after it is opened through `os.Root` on that
+ancestor. Only regular files are reachable, a symlink that escapes the ancestor is
+rejected, and each file is bounded at 64 MiB. An artifact `path` is different: it is
+image content, so it stays inside the specification's directory.
 
 The same path used for two different roles produces two records. A file is not "the
 key file"; it is "this file, in this role", and a trust decision has to know which.
