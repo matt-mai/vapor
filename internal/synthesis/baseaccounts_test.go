@@ -189,7 +189,8 @@ func TestBaseAccounts_RefusesAnEnabledMasterRecord(t *testing.T) {
 
 // A leading comment is not an account. Counting one as a taken name or id would take
 // the slot the real root record needs, and a master of nothing but comments would
-// defeat the fallback that names uid 0.
+// defeat the fallback that names uid 0. The comment is not published either: it
+// annotates a master file the build does not run, not the image's own database.
 func TestBaseAccounts_IgnoresCommentsInAMaster(t *testing.T) {
 	tree := packageAccounts(t)
 	commented := "# standard accounts\n\n" + basePasswdMaster
@@ -203,8 +204,11 @@ func TestBaseAccounts_IgnoresCommentsInAMaster(t *testing.T) {
 	if !strings.Contains(passwd, "\nroot:*:0:0:root:/root:/bin/bash\n") {
 		t.Fatalf("passwd = %q", passwd)
 	}
-	if !strings.HasPrefix(passwd, "_apt:x:42:65534::/nonexistent:/usr/sbin/nologin\n# standard accounts\n\n") {
-		t.Fatalf("comment was not carried over: %q", passwd)
+	if strings.Contains(passwd, "# standard accounts") {
+		t.Fatalf("master comment was published: %q", passwd)
+	}
+	if !strings.HasPrefix(passwd, "_apt:x:42:65534::/nonexistent:/usr/sbin/nologin\n") {
+		t.Fatalf("the image's own record was not kept first: %q", passwd)
 	}
 }
 
@@ -441,3 +445,90 @@ func TestApplyAccounts_ItselfAnImageThatOnlyGainsTheSandboxAccount(t *testing.T)
 		t.Fatalf("passwd = %q", passwd)
 	}
 }
+
+// A declared group outranks a master group of the same name or id. The declaration is
+// what the specification asked for; the masters are a convenience that must not turn a
+// legal specification into an error.
+func TestApplyAccounts_LetsDeclaredGroupsOutrankTheMaster(t *testing.T) {
+	cases := map[string]struct {
+		declared filesystem.GroupAccount
+		want     string
+	}{
+		"same name, other gid": {
+			declared: filesystem.GroupAccount{Name: "daemon", GID: new(100)},
+			want:     "daemon:x:100:\n",
+		},
+		"same gid, other name": {
+			declared: filesystem.GroupAccount{Name: "svc", GID: new(1)},
+			want:     "svc:x:1:\n",
+		},
+	}
+	for name, test := range cases {
+		t.Run(name, func(t *testing.T) {
+			tree := packageAccounts(t)
+			declared := &filesystem.Accounts{Groups: []filesystem.GroupAccount{test.declared}}
+			if err := synthesis.ApplyAccounts(tree, declared, nil, debianMasters); err != nil {
+				t.Fatalf("ApplyAccounts: %v", err)
+			}
+			group := readFile(t, tree, synthesis.GroupPath)
+			if !strings.Contains(group, test.want) {
+				t.Fatalf("group = %q, want it to contain %q", group, test.want)
+			}
+			for _, yielded := range []string{"daemon:x:1:", "daemon:*:1:"} {
+				if strings.Contains(group, yielded) && test.want != yielded {
+					t.Fatalf("the master group was not made to yield: %q", group)
+				}
+			}
+		})
+	}
+}
+
+// A group master record's password field is not a credential: a group's `*` is the
+// conventional placeholder, and holding it to the passwd rule would refuse every group
+// master there is.
+func TestApplyAccounts_DoesNotCheckThePasswordFieldOfAGroupMaster(t *testing.T) {
+	tree := vfs.New()
+	for path, content := range map[string]string{
+		synthesis.GroupPath:  "nogroup:x:65534:\n",
+		synthesis.PasswdPath: "_apt:x:42:65534::/nonexistent:/usr/sbin/nologin\n",
+		debianMasters.Group:  "# leading comment\nsvc::1:\n",
+		debianMasters.Passwd: basePasswdMaster,
+	} {
+		if err := tree.File(path, []byte(content), vfs.Attrs{Mode: 0o644}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := applyAccounts(t, tree); err != nil {
+		t.Fatalf("a group master was held to the passwd password rule: %v", err)
+	}
+	if group := readFile(t, tree, synthesis.GroupPath); !strings.Contains(group, "svc::1:") {
+		t.Fatalf("group = %q", group)
+	}
+}
+
+// An image with no account data at all, but a declared account, still needs a database:
+// the declaration is not the base-passwd convenience, so it is written and root is
+// named beside it.
+func TestApplyAccounts_WritesDeclarationsIntoAnEmptyImage(t *testing.T) {
+	tree := vfs.New()
+	gid, uid := 1, 65532
+	home, shell := "/srv", "/sbin/nologin"
+	declared := &filesystem.Accounts{
+		Groups: []filesystem.GroupAccount{{Name: "app", GID: &gid}},
+		Users: []filesystem.UserAccount{{
+			Name: "app", UID: &uid, GID: &gid, Home: &home, Shell: &shell,
+		}},
+	}
+	if err := synthesis.ApplyAccounts(tree, declared, nil, synthesis.BaseAccountMasters{}); err != nil {
+		t.Fatalf("ApplyAccounts: %v", err)
+	}
+	if passwd := readFile(t, tree, synthesis.PasswdPath); !strings.Contains(passwd, "app:x:65532:1:") ||
+		!strings.Contains(passwd, "root:*:0:0:") {
+		t.Fatalf("passwd = %q", passwd)
+	}
+	if shadow := readFile(t, tree, synthesis.ShadowPath); !strings.Contains(shadow, "app:*:") {
+		t.Fatalf("shadow = %q", shadow)
+	}
+}
+
+//go:fix inline

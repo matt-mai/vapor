@@ -87,26 +87,18 @@ func applyGroups(tree *vfs.Tree, groups []filesystem.GroupAccount) error {
 	if err != nil {
 		return err
 	}
+	changed := false
 	for _, group := range groups {
-		gid, err := groupID(group)
+		added, err := database.addGroup(group)
 		if err != nil {
 			return err
 		}
-		if found, ok := database.byName[group.Name]; ok {
-			if found.id != gid {
-				return fmt.Errorf("group %q is declared with gid %d but the image has %d",
-					group.Name, gid, found.id)
-			}
-			continue
-		}
-		if other, ok := database.byID[gid]; ok {
-			return fmt.Errorf("group %q is declared with gid %d, already used by group %q",
-				group.Name, gid, other.name)
-		}
-		record := databaseRecord{name: group.Name, id: gid,
-			fields: []string{group.Name, "x", strconv.FormatUint(uint64(gid), 10), ""}}
-		database.records = append(database.records, record)
-		database.byName[group.Name], database.byID[gid] = record, record
+		changed = changed || added
+	}
+	if !changed {
+		// Every declared group was already there, so the file is as it was. Rewriting it
+		// would detach a hard link and reflow a shape nothing asked to change.
+		return nil
 	}
 	return writeDatabase(tree, groupFile, database.records)
 }
@@ -132,10 +124,18 @@ func applyUsers(tree *vfs.Tree, users []filesystem.UserAccount) error {
 	if err != nil {
 		return err
 	}
+	changed := false
 	for _, user := range users {
-		if err := passwd.applyUser(user, groups.byID, shadowed); err != nil {
+		added, err := passwd.applyUser(user, groups.byID, shadowed)
+		if err != nil {
 			return err
 		}
+		changed = changed || added
+	}
+	if !changed {
+		// Every declared user was already there, so neither file is rewritten: a rewrite
+		// would detach a hard link and reflow a shape nothing asked to change.
+		return nil
 	}
 	if err := writeDatabase(tree, passwdFile, passwd.records); err != nil {
 		return err
@@ -186,57 +186,83 @@ func newAccountDatabaseFrom(tree *vfs.Tree, file accountDatabaseFile) (*accountD
 }
 
 // applyUser merges one declared user, recording the matching shadow entry so a
-// user can never exist without a disabled password.
+// user can never exist without a disabled password. It reports whether the passwd
+// or shadow database changed, so a declaration that added nothing leaves both files
+// alone.
 func (d *accountDatabase) applyUser(user filesystem.UserAccount, groupIDs map[uint32]databaseRecord,
 	shadowed *accountDatabase,
-) error {
+) (bool, error) {
 	if user.UID == nil || user.GID == nil || user.Home == nil || user.Shell == nil {
-		return fmt.Errorf("user %q has unresolved account fields", user.Name)
+		return false, fmt.Errorf("user %q has unresolved account fields", user.Name)
 	}
 	uid, gid, err := accountIDs(user)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if _, ok := groupIDs[gid]; !ok {
-		return fmt.Errorf("user %q requires primary gid %d, which the image does not define",
+		return false, fmt.Errorf("user %q requires primary gid %d, which the image does not define",
 			user.Name, gid)
 	}
-	fields := []string{user.Name, "x", strconv.FormatUint(uint64(uid), 10),
-		strconv.FormatUint(uint64(gid), 10), "", *user.Home, *user.Shell}
-	record := databaseRecord{name: user.Name, id: uid, fields: fields}
 	if found, ok := d.byName[user.Name]; ok {
 		if err := checkDeclaredIdentity(user, found, uid, gid); err != nil {
-			return err
+			return false, err
 		}
 		return ensureShadow(shadowed, user.Name)
 	}
 	if other, ok := d.byID[uid]; ok {
-		return fmt.Errorf("user %q is declared with uid %d, already used by user %q",
+		return false, fmt.Errorf("user %q is declared with uid %d, already used by user %q",
 			user.Name, uid, other.name)
 	}
-	d.records = append(d.records, record)
-	d.byName[user.Name], d.byID[uid] = record, record
-	return ensureShadow(shadowed, user.Name)
+	d.add(databaseRecord{name: user.Name, id: uid, fields: []string{user.Name, "x",
+		strconv.FormatUint(uint64(uid), 10), strconv.FormatUint(uint64(gid), 10),
+		"", *user.Home, *user.Shell}})
+	// A new account always needs its shadow line, so the file changed even when the
+	// line was already there: the passwd record is the change.
+	if _, err := ensureShadow(shadowed, user.Name); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
-// ensureShadow gives a declared user a disabled shadow record unless the image
-// already has one. A package that ships the passwd record but not the shadow one
-// would otherwise leave the account without the disabled-password guarantee.
+// addGroup merges one declared group, refusing a declaration that contradicts the
+// image's own record, and reports whether it added one.
+func (d *accountDatabase) addGroup(group filesystem.GroupAccount) (bool, error) {
+	gid, err := groupID(group)
+	if err != nil {
+		return false, err
+	}
+	if found, ok := d.byName[group.Name]; ok {
+		if found.id != gid {
+			return false, fmt.Errorf("group %q is declared with gid %d but the image has %d",
+				group.Name, gid, found.id)
+		}
+		return false, nil
+	}
+	if other, ok := d.byID[gid]; ok {
+		return false, fmt.Errorf("group %q is declared with gid %d, already used by group %q",
+			group.Name, gid, other.name)
+	}
+	d.add(databaseRecord{name: group.Name, id: gid,
+		fields: []string{group.Name, "x", strconv.FormatUint(uint64(gid), 10), ""}})
+	return true, nil
+}
+
+// ensureShadow makes a declared user's shadow record unable to authenticate, and reports
+// whether it changed the file. A package that ships the passwd record but not the shadow
+// one would otherwise leave the account without the disabled-password guarantee.
 //
-// An existing record with a usable password fails: a declared account must not
-// stay loggable with a password the specification never mentioned.
-func ensureShadow(shadowed *accountDatabase, name string) error {
+// An existing record with a usable password fails: a declared account must not stay
+// loggable with a password the specification never mentioned.
+func ensureShadow(shadowed *accountDatabase, name string) (bool, error) {
 	if found, ok := shadowed.byName[name]; ok {
 		if passwordUsable(found) {
-			return fmt.Errorf("user %q has a password in the image's shadow file; "+
+			return false, fmt.Errorf("user %q has a password in the image's shadow file; "+
 				"declare no password and remove the record to disable it", name)
 		}
-		return nil
+		return false, nil
 	}
-	shadow := disabledShadow(name)
-	shadowed.records = append(shadowed.records, shadow)
-	shadowed.byName[name] = shadow
-	return nil
+	shadowed.add(disabledShadow(name))
+	return true, nil
 }
 
 // passwdDelegates reports whether a passwd record's password field leaves
