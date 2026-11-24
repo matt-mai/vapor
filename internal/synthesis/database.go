@@ -54,10 +54,27 @@ func (d database) byID(location string) (map[uint32]databaseRecord, error) {
 	return result, nil
 }
 
+// The account databases are read without a declaration asking for them, so the
+// archive member limit does not apply: it bounds a package payload, not the work a
+// parser does. A real passwd or group file is a few kilobytes, so a file beyond
+// these bounds is either corrupt or hostile and is refused before it is read whole.
+const (
+	maxDatabaseBytes   = 1 << 20
+	maxDatabaseRecords = 1 << 16
+)
+
 // readDatabase loads a colon-separated account database, preserving comments and
 // blank lines so a selected package's file is not rewritten into a different
 // shape. A missing file is an empty database.
 func readDatabase(tree *vfs.Tree, file accountDatabaseFile) (database, error) {
+	entry, ok := tree.Lookup(file.location)
+	if !ok {
+		return nil, nil
+	}
+	if entry.Size > maxDatabaseBytes {
+		return nil, fmt.Errorf("%s is %d bytes, beyond the %d-byte account database bound",
+			file.location, entry.Size, maxDatabaseBytes)
+	}
 	content, err := tree.Read(file.location)
 	if err != nil {
 		if errors.Is(err, vfs.ErrNotExist) {
@@ -74,6 +91,9 @@ func readDatabase(tree *vfs.Tree, file accountDatabaseFile) (database, error) {
 func parseDatabase(location string, content []byte, idIndex int) (database, error) {
 	var result database
 	for line := range strings.Lines(string(content)) {
+		if len(result) == maxDatabaseRecords {
+			return nil, fmt.Errorf("%s has more than %d records", location, maxDatabaseRecords)
+		}
 		line = strings.TrimSuffix(line, "\n")
 		if line == "" || strings.HasPrefix(line, "#") {
 			result = append(result, databaseRecord{raw: line})

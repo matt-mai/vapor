@@ -459,11 +459,14 @@ func TestBuild_GivesAPTFetcherTheSandboxAccount(t *testing.T) {
 func TestBuild_CopiesTheBaseAccountMasters(t *testing.T) {
 	inputs, store := contentFixture(t)
 	inputs.Spec.Contents.Packages = append(inputs.Spec.Contents.Packages, contents.PackageRequest{Name: "base-passwd"})
+	// daemon is not uid 0, so it proves the masters reach the image rather than the
+	// fallback that names root alone.
 	payload := debBytes(t, "base-passwd", "3.6.7",
 		tarMember{name: "./usr/share/base-passwd/passwd.master",
-			body: []byte("root:*:0:0:root:/root:/bin/bash\n"), mode: 0o644},
+			body: []byte("root:*:0:0:root:/root:/bin/bash\n" +
+				"daemon:*:1:1:daemon:/usr/sbin:/usr/sbin/nologin\n"), mode: 0o644},
 		tarMember{name: "./usr/share/base-passwd/group.master",
-			body: []byte("root:*:0:\n"), mode: 0o644})
+			body: []byte("root:*:0:\ndaemon:*:1:\n"), mode: 0o644})
 	digest, size := storeFile(t, store, payload)
 	inputs.Lockfile.Packages = append(inputs.Lockfile.Packages, lock.Package{
 		Platform: "linux/amd64", Name: "base-passwd", Version: "3.6.7", Architecture: "amd64",
@@ -484,14 +487,14 @@ func TestBuild_CopiesTheBaseAccountMasters(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reading passwd: %v", err)
 	}
-	if string(passwd) != "root:*:0:0:root:/root:/bin/bash\n" {
+	if string(passwd) != "root:*:0:0:root:/root:/bin/bash\ndaemon:*:1:1:daemon:/usr/sbin:/usr/sbin/nologin\n" {
 		t.Fatalf("passwd = %q", passwd)
 	}
 	group, err := images[0].Tree.Read(synthesis.GroupPath)
 	if err != nil {
 		t.Fatalf("reading group: %v", err)
 	}
-	if string(group) != "root:*:0:\n" {
+	if string(group) != "root:*:0:\ndaemon:*:1:\n" {
 		t.Fatalf("group = %q", group)
 	}
 }

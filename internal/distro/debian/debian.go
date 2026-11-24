@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/matt-mai/vapor/internal/distro/deb"
+	"github.com/matt-mai/vapor/internal/synthesis"
 )
 
 // distroName is the provider name and the name of its main archive.
@@ -76,6 +77,15 @@ func (p *Provider) Distro() string { return distroName }
 
 // Release implements distro.Provider. The canonical release is the codename.
 func (p *Provider) Release() string { return p.release }
+
+// BaseAccountMasters implements distro.Provider. Debian's base-passwd package ships
+// the records its maintainer script would have copied into /etc/passwd and /etc/group.
+func (p *Provider) BaseAccountMasters() synthesis.BaseAccountMasters {
+	return synthesis.BaseAccountMasters{ //nolint:gosec // file paths, not credentials
+		Passwd: "/usr/share/base-passwd/passwd.master",
+		Group:  "/usr/share/base-passwd/group.master",
+	}
+}
 
 // CABundlePath implements distro.Provider.
 func (p *Provider) CABundlePath() string { return caBundlePath }

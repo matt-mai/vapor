@@ -197,15 +197,25 @@ account by name fails: apt's `SetupAPTPartialDirectory` cannot chown its downloa
 directories to `root`, so it disables its own sandbox and fetches as root for the rest
 of the run, and `chown root:root` reports an unknown group.
 
-`BaseAccounts` copies the two masters into the databases, and writes one disabled
-`/etc/shadow` line per added account when the image ships a shadow file. The records
-are read from the masters the selected release ships rather than compiled in, so a
-release that changes an account changes the image. An image without `base-passwd`
-gains uid 0's two records, because a container has a superuser whether its account
-database names one or not; an image with no account data at all gains nothing.
+`ApplyAccounts` is one staged pass over every account an image needs, in the order that
+lets each one resolve: the distribution's groups, the declared groups, the declared
+users, the sandbox account, and finally the distribution's users. A declaration may name
+a group only a master supplies, and a master user may need a group the declaration
+supplies, so the passes cannot run as independent steps. The distribution supplies the
+master locations through its provider; synthesis never hardcodes them.
+
+Within a pass the records are read from the masters the selected release ships rather
+than compiled in, so a release that changes an account changes the image, and one
+disabled `/etc/shadow` line is written per added account when the image ships a shadow
+file. An image without `base-passwd` gains uid 0's two records, because a container has
+a superuser whether its account database names one or not; an image with no account data
+at all, and no apt fetcher, gains nothing.
 
 Like the sandbox account, a base account never displaces one the image already has: a
-taken name or id keeps its record even when the other half of the pair is free.
+taken name or id keeps its record even when the other half of the pair is free, and a
+master user whose primary group did not survive the merge is skipped rather than written
+naming a group the image does not define. A file the merge leaves unchanged is not
+rewritten at all.
 
 ### Timezone
 

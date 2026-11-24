@@ -106,8 +106,9 @@ image ships one. An image therefore names `root`, `daemon`, `www-data` and the r
 exactly as the release defines them.
 
 An account the image already has keeps its record, so a declaration never fights the
-masters. An image without `base-passwd` — a static binary and nothing else — gains no
-account database at all.
+masters. A user whose group is not in the image is left out rather than recorded against
+a group that does not exist. An image without `base-passwd` — a static binary and
+nothing else — gains no account database at all.
 
 ## timezone
 
