@@ -304,6 +304,35 @@ func TestFetcherRejectsCrossOriginRedirect(t *testing.T) {
 	}
 }
 
+// A signed archive URL keeps its signature in the query, so a redirect must not be told
+// where the previous hop came from: Go would fill a Referer in from the signed URL.
+func TestFetcherRedirectDropsTheReferer(t *testing.T) {
+	var referred string
+	server := httptest.NewTLSServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path == "/dists/resolute/InRelease" {
+			http.Redirect(writer, request, "/signed?signature=secret", http.StatusFound)
+			return
+		}
+		referred = request.Header.Get("Referer")
+		if _, err := writer.Write([]byte("ok")); err != nil {
+			t.Errorf("write: %v", err)
+		}
+	}))
+	defer server.Close()
+	fetcher, err := NewFetcher(server.Client(), server.URL, Credentials{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := fetcher.Fetch(context.Background(), "dists/resolute/InRelease")
+	if err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	body.Close()
+	if referred != "" {
+		t.Fatalf("Referer = %q, want it dropped", referred)
+	}
+}
+
 // The fetcher serves the public archive too. A failure there must not blame Pro
 // credentials, and it must say what failed, or a reader is sent looking for a
 // subscription that has nothing to do with the problem.

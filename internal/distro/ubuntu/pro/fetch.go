@@ -152,6 +152,10 @@ func checkProRedirect(request *http.Request, via []*http.Request) error {
 	if request.URL.Scheme != httpsScheme || request.URL.Host != via[0].URL.Host || request.URL.User != nil {
 		return errors.New("pro archive redirect left its origin")
 	}
+	// Go fills in a Referer from the previous hop, and a signed archive URL keeps its
+	// signature in the query. An archive request has no referring page, so no hop is
+	// told where the last one came from.
+	request.Header.Del("Referer")
 	return nil
 }
 
