@@ -6,6 +6,7 @@ import (
 
 	"github.com/matt-mai/vapor/internal/distro/deb"
 	"github.com/matt-mai/vapor/internal/schema/base"
+	"github.com/matt-mai/vapor/internal/schema/contents"
 	schemaSpec "github.com/matt-mai/vapor/internal/schema/spec"
 )
 
@@ -46,6 +47,9 @@ func verifyLockPackage(pkg *Package, spec *schemaSpec.Spec, repositories map[str
 	if err := verifyLocksource(pkg.Source, fmt.Sprintf("lock packages[%d]", i)); err != nil {
 		return err
 	}
+	if err := contents.ValidateDeclaredCPE(pkg.CPE); err != nil {
+		return fmt.Errorf("lock packages[%d]: %w", i, err)
+	}
 	return verifyLockPackageRepository(pkg, spec, repositories, i)
 }
 
@@ -84,11 +88,24 @@ func verifyLockPackageRequests(spec *schemaSpec.Spec, packages map[lockPackageKe
 			if !ok {
 				return fmt.Errorf("lock packages: missing direct package %q on %s", request.Name, platform)
 			}
-			if request.Version != nil && !satisfies(*request.Version, pkg.Version) {
-				return fmt.Errorf("lock packages: direct package %q version %q does not satisfy %q on %s",
-					request.Name, pkg.Version, *request.Version, platform)
+			if err := verifyLockPackageRequest(request, pkg, platform); err != nil {
+				return err
 			}
 		}
+	}
+	return nil
+}
+
+// verifyLockPackageRequest checks one platform's record against the request that asked
+// for it: the version it satisfies and the identity the specification declared.
+func verifyLockPackageRequest(request contents.PackageRequest, pkg *Package, platform string) error {
+	if request.Version != nil && !satisfies(*request.Version, pkg.Version) {
+		return fmt.Errorf("lock packages: direct package %q version %q does not satisfy %q on %s",
+			request.Name, pkg.Version, *request.Version, platform)
+	}
+	if pkg.CPE != request.CPE {
+		return fmt.Errorf("lock packages: package %q cpe does not match the specification on %s",
+			request.Name, platform)
 	}
 	return nil
 }

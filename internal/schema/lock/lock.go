@@ -75,15 +75,19 @@ type Archive struct {
 
 // Repository records one consumed suite and its authentication evidence.
 type Repository struct {
-	ID           string            `yaml:"id" json:"id"`
-	Name         string            `yaml:"name" json:"name"`
-	Platform     string            `yaml:"platform" json:"platform"`
-	Architecture string            `yaml:"architecture" json:"architecture"`
-	URL          string            `yaml:"url" json:"url"`
-	Suite        string            `yaml:"suite" json:"suite"`
-	Trust        RepositoryTrust   `yaml:"trust" json:"trust"`
-	Release      RepositoryRelease `yaml:"release" json:"release"`
-	Indexes      []Index           `yaml:"indexes" json:"indexes"`
+	ID           string `yaml:"id" json:"id"`
+	Name         string `yaml:"name" json:"name"`
+	Platform     string `yaml:"platform" json:"platform"`
+	Architecture string `yaml:"architecture" json:"architecture"`
+	URL          string `yaml:"url" json:"url"`
+	Suite        string `yaml:"suite" json:"suite"`
+	// Identity is "own" when the repository authenticates its own release identity
+	// instead of the distribution's, which is what makes its packages the vendor's and
+	// not the distribution's. Omitted for a base-release repository.
+	Identity string            `yaml:"identity,omitempty" json:"identity,omitempty"`
+	Trust    RepositoryTrust   `yaml:"trust" json:"trust"`
+	Release  RepositoryRelease `yaml:"release" json:"release"`
+	Indexes  []Index           `yaml:"indexes" json:"indexes"`
 }
 
 // RepositoryTrust lists anchors that were trusted for this suite.
@@ -134,21 +138,27 @@ type Package struct {
 	// Source is the source package the archive was built from, absent when the index
 	// names none. Vulnerability data and package URLs are keyed on it, so a scanner
 	// reads a library under the package that publishes its fixes.
-	Source     string  `yaml:"source,omitempty" json:"source,omitempty"`
-	Repository string  `yaml:"repository" json:"repository"`
-	Content    Content `yaml:"content" json:"content"`
+	Source     string `yaml:"source,omitempty" json:"source,omitempty"`
+	Repository string `yaml:"repository" json:"repository"`
+	// CPE is the advisory database's name for the package, declared by the specification
+	// when the package's own index files none under. Absent otherwise.
+	CPE     string  `yaml:"cpe,omitempty" json:"cpe,omitempty"`
+	Content Content `yaml:"content" json:"content"`
 }
 
 // Slice is one resolved sliced-package payload and definition closure.
 type Slice struct {
-	Platform         string   `yaml:"platform" json:"platform"`
-	Package          string   `yaml:"package" json:"package"`
-	Version          string   `yaml:"version" json:"version"`
-	Architecture     string   `yaml:"architecture" json:"architecture"`
-	Source           string   `yaml:"source,omitempty" json:"source,omitempty"`
-	Catalogue        string   `yaml:"catalogue" json:"catalogue"`
-	Archive          string   `yaml:"archive" json:"archive"`
-	Repository       string   `yaml:"repository" json:"repository"`
+	Platform     string `yaml:"platform" json:"platform"`
+	Package      string `yaml:"package" json:"package"`
+	Version      string `yaml:"version" json:"version"`
+	Architecture string `yaml:"architecture" json:"architecture"`
+	Source       string `yaml:"source,omitempty" json:"source,omitempty"`
+	Catalogue    string `yaml:"catalogue" json:"catalogue"`
+	Archive      string `yaml:"archive" json:"archive"`
+	Repository   string `yaml:"repository" json:"repository"`
+	// CPE is the advisory database's name for the package, declared by the specification
+	// when the package's own index files none under. Absent otherwise.
+	CPE              string   `yaml:"cpe,omitempty" json:"cpe,omitempty"`
 	Content          Content  `yaml:"content" json:"content"`
 	Selected         []string `yaml:"selected" json:"selected"`
 	Closure          []string `yaml:"closure" json:"closure"`

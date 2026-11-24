@@ -24,15 +24,9 @@ func Validate(contents *Contents, platforms []string) error {
 }
 
 func validateRequests(contents *Contents) error {
-	whole := make(map[string]bool)
-	for i, request := range contents.Packages {
-		if whole[request.Name] {
-			return errors.New("duplicate whole package request")
-		}
-		whole[request.Name] = true
-		if err := validatePackageRequest(request.Name, request.Version); err != nil {
-			return fmt.Errorf("contents.packages[%d]: %w", i, err)
-		}
+	whole, err := validateWholePackages(contents.Packages)
+	if err != nil {
+		return err
 	}
 	seen, pins := make(map[string]bool), make(map[string]string)
 	for i, request := range contents.Slices {
@@ -51,8 +45,34 @@ func validateRequests(contents *Contents) error {
 	return nil
 }
 
+// validateWholePackages checks the whole-package requests and returns the names they
+// claim, which a slice request may not take as well.
+func validateWholePackages(packages []PackageRequest) (map[string]bool, error) {
+	whole := make(map[string]bool, len(packages))
+	for i, request := range packages {
+		if whole[request.Name] {
+			return nil, errors.New("duplicate whole package request")
+		}
+		whole[request.Name] = true
+		if err := validateWholePackage(request); err != nil {
+			return nil, fmt.Errorf("contents.packages[%d]: %w", i, err)
+		}
+	}
+	return whole, nil
+}
+
+func validateWholePackage(request PackageRequest) error {
+	if err := validatePackageRequest(request.Name, request.Version); err != nil {
+		return err
+	}
+	return ValidateDeclaredCPE(request.CPE)
+}
+
 func validateSlice(request SliceRequest, catalogues []CatalogueSource, pins map[string]string) error {
 	if err := validatePackageRequest(request.Package, request.Version); err != nil {
+		return err
+	}
+	if err := ValidateDeclaredCPE(request.CPE); err != nil {
 		return err
 	}
 	if err := base.RequirePattern("slice name", request.Slice, `^[a-z](?:-?[a-z0-9]){2,}$`); err != nil {

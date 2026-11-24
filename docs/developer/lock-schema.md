@@ -329,6 +329,7 @@ repositories:
 | `platform`, `architecture` | Platform and native index architecture. |
 | `url` | The declared endpoint for that repository and platform, never a redirected or credentialed URL. |
 | `suite` | One declared specification suite for the repository. |
+| `identity` | Present only as `own` for a repository that authenticates its own release identity, matching the specification's `identity`. Such a repository publishes packages the distribution never built, so their package URLs carry its name and suite as the vendor and release. |
 | `trust.keys` | Every configured trust anchor for the suite, plus each provider-default anchor whose signature was accepted. Fingerprints are unique and `release.signers` is a subset. |
 | `trust.keys[].fingerprint` | The full fingerprint that was trusted for this suite. |
 | `trust.keys[].path` | Present only for a specification-declared key file, and it must match a `trust-key` local input with the same hash and size. |
@@ -370,6 +371,7 @@ packages:
 | `name`, `version`, `architecture` | Resolved binary package identity; the version is the exact index version. |
 | `source` | Source package the archive was built from, from its `Source` field; absent when the archive name is the source name. |
 | `repository` | Consumed repository record ID. |
+| `cpe` | CPE 2.3 name the specification declared for the package, which a scanner matches advisories against when the package's own index files none under it. Absent when none was declared; must equal the specification's. |
 | `content.path`, `sha256`, `size` | Advertised archive path relative to that repository URL, and the exact archive bytes. |
 
 `(platform, name)` is unique, and package names are disjoint from slice package names
@@ -416,6 +418,7 @@ slices:
 | `archive` | Selected upstream catalogue archive name. Store origins are absent; see [stores](#stores). |
 | `source` | Source package the archive was built from; absent when it is the package's own name. |
 | `repository` | Consumed repository record ID for the package archive. |
+| `cpe` | CPE 2.3 name the specification declared for the package. Absent when none was declared; must equal the specification's. |
 | `content.path`, `sha256`, `size` | Exact package archive bytes and advertised path. |
 | `selected` | Unique upstream slice names directly requested by the specification for this package, in request order; empty for a package reached only transitively. |
 | `closure` | Nonempty unique slice names of this package in dependency-first order; contains every `selected` name. |

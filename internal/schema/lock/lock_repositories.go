@@ -56,6 +56,9 @@ func verifyRepository(repository *Repository, specRepository *contents.Repositor
 	if err := verifyRepositoryScope(repository, specRepository, provider, spec, i); err != nil {
 		return err
 	}
+	if err := verifyRepositoryIdentity(repository, specRepository, i); err != nil {
+		return err
+	}
 	if repository.ID != RepositoryID(repository.Name, repository.Platform, repository.Architecture, repository.URL,
 		repository.Suite) {
 		return fmt.Errorf("lock repositories[%d]: ID does not match its payload", i)
@@ -87,6 +90,21 @@ func verifyRepositoryScope(repository *Repository, specRepository *contents.Repo
 		return checkProviderSuite(repository, provider, i)
 	}
 	return checkDefaultRepositoryScope(repository, provider, spec, i)
+}
+
+// verifyRepositoryIdentity checks that a repository's recorded identity is the one the
+// specification declares. The flag decides which vendor's name its packages are
+// published under, so a lock that disagrees with the specification would attribute them
+// to the wrong vendor.
+func verifyRepositoryIdentity(repository *Repository, specRepository *contents.Repository, i int) error {
+	declared := ""
+	if specRepository != nil && specRepository.Identity != nil {
+		declared = *specRepository.Identity
+	}
+	if repository.Identity != declared {
+		return fmt.Errorf("lock repositories[%d]: identity does not match the specification", i)
+	}
+	return nil
 }
 
 // checkProviderSuite applies the release rule to a repository the specification

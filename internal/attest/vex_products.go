@@ -2,6 +2,8 @@ package attest
 
 import (
 	"fmt"
+
+	"github.com/matt-mai/vapor/internal/schema/contents"
 )
 
 // targets the package, and a reader matching against its SBOM has that same name.
@@ -24,13 +26,15 @@ func (input *VEXInput) product(name string) ([]product, error) {
 	for position := range input.Packages {
 		record := &input.Packages[position]
 		if record.Platform == input.Platform && record.Name == name {
-			return input.deb(record.Name, record.Version, record.Architecture, record.Source)
+			return input.deb(record.Repository, record.Name, record.Version,
+				record.Architecture, record.Source)
 		}
 	}
 	for position := range input.Slices {
 		record := &input.Slices[position]
 		if record.Platform == input.Platform && record.Package == name {
-			return input.deb(record.Package, record.Version, record.Architecture, record.Source)
+			return input.deb(record.Repository, record.Package, record.Version,
+				record.Architecture, record.Source)
 		}
 	}
 	return nil, nil
@@ -55,12 +59,26 @@ func (input *VEXInput) artifactProducts(name string) ([]product, error) {
 }
 
 // deb builds a package product from a locked record.
-func (input *VEXInput) deb(name, version, arch, upstream string) ([]product, error) {
-	built, err := parseProduct(packageURL(input.Distro, input.Release, name, version, arch, upstream))
+func (input *VEXInput) deb(repository, name, version, arch, upstream string) ([]product, error) {
+	vendor, release := input.vendorOf(repository)
+	built, err := parseProduct(packageURL(vendor, release, name, version, arch, upstream))
 	if err != nil {
 		return nil, err
 	}
 	return []product{built}, nil
+}
+
+// vendorOf returns the namespace and release a record is published under, which is the
+// vendor's own for a repository that authenticates its own release identity.
+func (input *VEXInput) vendorOf(repository string) (string, string) {
+	for position := range input.Repositories {
+		record := &input.Repositories[position]
+		if record.Platform == input.Platform && record.ID == repository &&
+			record.Identity == contents.RepositoryIdentityOwn {
+			return record.Name, record.Suite
+		}
+	}
+	return input.Distro, input.Release
 }
 
 // importProducts matches each product an imported statement names to the lock.
@@ -110,14 +128,16 @@ func (input *VEXInput) lockProductURLs() []string {
 	for position := range input.Packages {
 		record := &input.Packages[position]
 		if record.Platform == input.Platform {
-			urls = append(urls, packageURL(input.Distro, input.Release,
+			vendor, release := input.vendorOf(record.Repository)
+			urls = append(urls, packageURL(vendor, release,
 				record.Name, record.Version, record.Architecture, record.Source))
 		}
 	}
 	for position := range input.Slices {
 		record := &input.Slices[position]
 		if record.Platform == input.Platform {
-			urls = append(urls, packageURL(input.Distro, input.Release,
+			vendor, release := input.vendorOf(record.Repository)
+			urls = append(urls, packageURL(vendor, release,
 				record.Package, record.Version, record.Architecture, record.Source))
 		}
 	}

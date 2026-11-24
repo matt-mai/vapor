@@ -110,7 +110,8 @@ func (options *buildOptions) sbomInputs(built []builder.Image) []attest.SBOMInpu
 			Name: options.spec.Image, Platform: image.Platform.String(),
 			Subject: image.Image.ManifestDigest,
 			Distro:  options.lock.Provider.Distro, Release: options.lock.Provider.Release,
-			Packages: options.lock.Packages, Slices: options.lock.Slices,
+			Repositories: options.lock.Repositories,
+			Packages:     options.lock.Packages, Slices: options.lock.Slices,
 			Artifacts: options.lock.Artifacts, Tree: image.Tree, Original: image.Original,
 		})
 	}
@@ -162,7 +163,8 @@ func (options *buildOptions) vexStatement(image *builder.Image) ([]statement, er
 		AbsentChecks: *options.spec.VEX.CheckAbsentPaths,
 		Platform:     image.Platform.String(),
 		Distro:       options.lock.Provider.Distro, Release: options.lock.Provider.Release,
-		Claims: options.spec.VEX.Assertions, Packages: options.lock.Packages,
+		Repositories: options.lock.Repositories,
+		Claims:       options.spec.VEX.Assertions, Packages: options.lock.Packages,
 		Slices: options.lock.Slices, Artifacts: options.lock.Artifacts,
 	}
 	for _, document := range options.documents {

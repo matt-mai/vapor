@@ -48,10 +48,15 @@ type VEXInput struct {
 	AbsentChecks bool
 
 	Platform string
-	// Distro and Release qualify a package URL exactly as the SPDX document does, so one
-	// product string identifies the same package in both payloads.
+	// Distro and Release are the distribution the image is built for. A record from a
+	// repository that authenticates its own release identity is qualified by that
+	// vendor instead, so one product string identifies the same package in both payloads.
 	Distro  string
 	Release string
+
+	// Repositories are the platform's locked repositories, which decide whether a record
+	// is published under the distribution's identity or the vendor's.
+	Repositories []lock.Repository
 
 	// Claims are the assertions the specification makes. Imported holds the claims
 	// already resolved from imported documents, so a payload can merge both sources.
