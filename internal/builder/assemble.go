@@ -103,6 +103,9 @@ func (i *Input) synthesize(ctx context.Context, tree *vfs.Tree, content *Content
 	if err := synthesis.SandboxAccount(tree, content.Packages); err != nil {
 		return fmt.Errorf("apt sandbox account: %w", err)
 	}
+	if err := synthesis.BaseAccounts(tree); err != nil {
+		return fmt.Errorf("base accounts: %w", err)
+	}
 	if err := synthesis.Timezone(tree, declared.Timezone); err != nil {
 		return fmt.Errorf("timezone: %w", err)
 	}
