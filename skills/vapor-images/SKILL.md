@@ -333,6 +333,9 @@ Errors name their cause; fix the spec, never weaken validation:
 ## Rules of thumb
 
 - Lock after every change to `image.yaml`; build only from the lock. Builds are offline and fail on missing/corrupt cache data.
+- Narrow a slice or package `version` with an operator (`=`, `!=`, `>`, `>=`, `<`, `<=`,
+  `~>`) when the archive's newest is not what you want: `~> 1.27` stays on 1.27. A bare
+  version is refused.
 - Podman/Docker are only for running images; Vapor needs neither.
 - Slices and catalogues live in `reference/chisel.md`; distro differences in
   `reference/distros.md`; every field in `reference/spec.md`.
