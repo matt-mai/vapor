@@ -271,33 +271,54 @@ whole-package stage from the lock's packages, the slice stage from the locked sl
 and a payload whose control stanza did not survive decoding fails that stage rather
 than being recorded without metadata.
 
-`/var/lib/dpkg/status` gets one record per package. A whole package is
-`install ok installed`. A sliced package is `install ok unpacked`, which is a
-deliberate choice: a sliced package genuinely does not have all its files, and saying
-"installed" would be a false claim that tools like `dpkg -V` would act on.
+`/var/lib/dpkg/status` gets one record per package, and the control stanza is copied
+verbatim. Records are sorted by name and architecture, existing records that no
+package accounts for are kept, and the file is bounded by `MaxStatusFileSize`. A
+package that owns no regular file gets no record, for the reason given under the file
+lists below.
 
-Records are sorted by name and architecture, the control stanza is copied verbatim,
-the `Status` field is dropped and re-derived, and existing records that no package
-accounts for are kept. The file is bounded by `MaxStatusFileSize`. A package that owns
-no regular file gets no record, for the reason given under the file lists below.
+### Why a sliced image has no Status fields
 
-A sliced package's record also loses its dependency relations (`Depends`,
-`Pre-Depends`, `Recommends`, `Suggests`, `Enhances`, `Breaks`, `Conflicts`,
-`Provides`, `Replaces`, `Built-Using`). Those relations describe the whole package,
-and the image does not ship the whole package, so a package manager reading
-`install ok unpacked` alongside `Pre-Depends: awk` sees a database it cannot repair
-and refuses every later operation — `apt-get install` included, with nothing but
-"Unmet dependencies" to explain it. What a slice needs was resolved at lock time and
-recorded in the lock, so the relation text adds no information the image can act on.
-A whole package keeps its relations, because it really does contain every file they
-describe.
+In an image whose packages are all whole, every record carries `Status: install ok
+installed`, and both dpkg and a package manager read the database normally.
+
+An image holding a slice writes no `Status` field in any record. This is the same
+tradeoff Canonical's `chisel-wrapper --generate-dpkg-status` makes: it appends
+`dpkg-deb -f` output verbatim, which carries no `Status` field either. dpkg reads a
+record without one as `unknown ok not-installed`.
+
+Why not `install ok unpacked`: a package manager compares the recorded stanza against
+the archive's own to decide whether an upgrade is available. The comparison hashes
+`Installed-Size`, `Depends`, `Pre-Depends`, `Conflicts`, `Breaks` and `Replaces`, and
+any difference produces a second version object with the same version string, which
+reads as a newer version. Dropping a slice's relations therefore makes every sliced
+package appear in `apt list --upgradable` at the version it already has, and
+`apt-get upgrade` then re-unpacks the whole package and puts back the files the slice
+left out. Keeping the relations and claiming `install ok unpacked` instead gives a
+package manager a record it cannot repair: a single `Depends` whose target is not in
+the database stops every later operation with `E: Unmet dependencies`, which is worse
+than the phantom upgrade.
+
+With no `Status` field at all, a package manager sees nothing installed: no broken
+package to repair, no phantom upgrade, and `apt-get install`, `remove`, `upgrade` and
+`dist-upgrade` all behave. The cost is that dpkg cannot tell that a package is
+installed either — `dpkg -l` lists the record as `un`, `dpkg -L` names no files, and
+`dpkg --verify` checks nothing. Scanners are unaffected, because they read the record
+itself.
+
+The choice is per database, not per record. Mixing recorded statuses with statusless
+records points a whole package's relations at packages the database says are absent,
+and every package operation fails. One slice anywhere therefore means no `Status`
+field anywhere, which is why an image that installs packages at run time should not
+be assembled from slices.
 
 ### The dpkg file lists
 
 `/var/lib/dpkg/info/<package>.list` names the paths a package contributed, one per
 line. Without them every `dpkg` query warns that the files list is missing, `dpkg -L`
 prints nothing and `dpkg --verify` cannot tell a complete package from one whose files
-are gone.
+are gone. dpkg reads a list only alongside a record it accepts as installed, so in an
+image that holds a slice the lists are written but inert.
 
 The paths come from the tree's origins, not from the package archive: an entry is
 listed for a package when that package's payload carried it and it is still in the

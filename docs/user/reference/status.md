@@ -28,9 +28,11 @@ so you know what to expect.
 - `filesystem` paths, accounts, timezone, certificates and `os-release` overrides.
 - Hardening passes and the dynamic library check.
 - `/var/lib/dpkg/status` and the per-package file lists under `/var/lib/dpkg/info/`, so
-  a scanner can inventory the image and package tooling can query what is installed.
-  APT sources and repository keys are written only on request
-  (`hardening.keep-package-sources`), for an image that installs packages at run time.
+  a scanner can inventory the image. A record carries `install ok installed` in an
+  image of whole packages; an image that holds a slice records no status field, so a
+  package manager does not read the database as broken. APT sources and repository
+  keys are written only on request (`hardening.keep-package-sources`), for an image
+  that installs packages at run time.
 - Export as an OCI layout or an OCI archive.
 - Push to a registry with the tags in the specification, and upload the attached
   statements beside the image they describe.

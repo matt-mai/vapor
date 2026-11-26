@@ -116,8 +116,9 @@ func (i *Input) synthesize(ctx context.Context, tree *vfs.Tree, content *Content
 	return i.aptSources(ctx, tree, platform)
 }
 
-// packageDatabase writes the dpkg records collected during assembly: a whole
-// package is installed, a sliced one is unpacked.
+// packageDatabase writes the dpkg records collected during assembly. One slice in
+// the image means no record carries a status field, so a package manager reads the
+// database as nothing installed rather than as something broken.
 func (i *Input) packageDatabase(tree *vfs.Tree, content *Content) error {
 	if err := synthesis.PackageDatabase(tree, content.Packages); err != nil {
 		return fmt.Errorf("package database: %w", err)

@@ -213,11 +213,17 @@ A list you provide yourself is not duplicated. If a slice already ships one,
 Vapor leaves it alone rather than writing a second list naming the same archive,
 which APT reports as configured multiple times.
 
-A sliced package is listed as `unpacked` rather than `installed`, and without the
-dependency list of the whole package. That is deliberate: a slice contains part of
-a package, and claiming otherwise makes the package manager think the image is
-broken and refuse every later install. What a slice needs was decided when you
-locked, so it is already present.
+A slice in the image means no record carries a status field. A package manager then
+sees nothing installed: no broken package to repair, and no upgrade it cannot
+perform. That is deliberate, and it is the same tradeoff Canonical's chisel images
+make. A slice contains part of a package, so when package tooling is available it
+would otherwise report an available update at the version already present and then
+re-unpack the whole package, restoring the files the slice left out. What a slice
+needs was decided when you locked, so it is already present.
+
+The cost is that dpkg cannot tell that a package is installed either: `dpkg -l` shows
+the record without a status, `dpkg -L` names no files and `dpkg --verify` checks
+nothing. Scanners are unaffected.
 
 The practical effect:
 
@@ -226,7 +232,7 @@ podman run --rm my-image dpkg -l
 podman run --rm my-image apt-get install -y curl
 ```
 
-`dpkg -l` works in any image with packages. `apt-get install` needs the shells and
+`apt-get install` needs the shells and
 package tooling that hardening normally removes, and the package sources it does not
 write by default, so it only works in an image that keeps them:
 
@@ -236,6 +242,13 @@ hardening:
   strip-apt-dpkg: false
   keep-package-sources: true
 ```
+
+A builder image — one that installs packages at run time — should then be built from
+whole packages rather than slices. An image in which every package is whole records
+`install ok installed` for each of them, and dpkg and a package manager both read it
+normally. Mixing whole packages with slices does not help: one slice anywhere turns
+the status field off for the whole database, so the whole packages lose their
+recorded status too.
 
 ## Hardening
 

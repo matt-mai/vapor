@@ -273,7 +273,7 @@ func TestContent_WholeAndSlicedContent(t *testing.T) {
 	}
 	want := map[string]synthesis.PackageStatus{
 		"openssl":    synthesis.StatusInstalled,
-		"base-files": synthesis.StatusUnpacked,
+		"base-files": synthesis.StatusSliced,
 	}
 	if len(statuses) != len(want) {
 		t.Fatalf("packages = %+v", content.Packages)
@@ -345,7 +345,7 @@ func TestContent_RecordsOneStatePerDistinctSlicePackage(t *testing.T) {
 	names := make([]string, 0, len(content.Packages))
 	for _, pkg := range content.Packages {
 		names = append(names, pkg.Name)
-		if pkg.Status != synthesis.StatusInstalled && pkg.Status != synthesis.StatusUnpacked {
+		if pkg.Status != synthesis.StatusInstalled && pkg.Status != synthesis.StatusSliced {
 			t.Fatalf("%s status = %q", pkg.Name, pkg.Status)
 		}
 		if len(pkg.Control) == 0 {

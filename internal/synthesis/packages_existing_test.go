@@ -11,7 +11,7 @@ import (
 func TestPackageDatabase_PreservesContinuationLines(t *testing.T) {
 	tree := treeOwning(t, "base-files")
 	if err := synthesis.PackageDatabase(tree, []synthesis.PackageState{
-		packageState("base-files", "13ubuntu10.5", synthesis.StatusUnpacked, baseFilesControl),
+		packageState("base-files", "13ubuntu10.5", synthesis.StatusSliced, baseFilesControl),
 	}); err != nil {
 		t.Fatalf("PackageDatabase: %v", err)
 	}
@@ -29,7 +29,7 @@ func TestPackageDatabase_KeepsUncoveredRecords(t *testing.T) {
 		t.Fatalf("file: %v", err)
 	}
 	if err := synthesis.PackageDatabase(tree, []synthesis.PackageState{
-		packageState("base-files", "13ubuntu10.5", synthesis.StatusUnpacked, baseFilesControl),
+		packageState("base-files", "13ubuntu10.5", synthesis.StatusSliced, baseFilesControl),
 	}); err != nil {
 		t.Fatalf("PackageDatabase: %v", err)
 	}

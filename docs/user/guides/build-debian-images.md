@@ -98,9 +98,9 @@ A package install here means its files, and nothing more:
 - The maintainer scripts are not executed, and the package's triggers do not run.
   Vapor never runs a script from a package, on any path.
 
-The database entry says `install ok installed` for a whole package and `install ok
-unpacked` for a sliced one, which is the honest state of each: a slice really does
-not have all of the package's files.
+The database entry says `install ok installed` for a whole package. In an image that
+holds a slice, no entry carries a status at all — see
+[what a slice trades away](#what-a-slice-trades-away).
 
 What a script would have done is yours to declare, and Vapor writes it
 deterministically:

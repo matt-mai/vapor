@@ -27,17 +27,22 @@ const (
 	fieldMultiArch    = "Multi-Arch"
 )
 
-// PackageStatus is the dpkg state a package is recorded with.
+// PackageStatus says whether the image holds a package whole or only through a
+// slice of it.
 type PackageStatus string
 
 const (
 	// StatusInstalled marks a whole package, whose every file is present.
-	StatusInstalled PackageStatus = "install ok installed"
-	// StatusUnpacked marks a sliced package: its selected files are present but
-	// dpkg never configured it. Scanners read unpacked records, so a slice stays
-	// visible to vulnerability scanning instead of silently disappearing.
-	StatusUnpacked PackageStatus = "install ok unpacked"
+	StatusInstalled PackageStatus = "whole"
+	// StatusSliced marks a sliced package: only its selected files are present.
+	// Scanners read records, so a slice stays visible to vulnerability scanning
+	// instead of silently disappearing, whatever the database says about statuses.
+	StatusSliced PackageStatus = "sliced"
 )
+
+// installedStatus is the Status field dpkg reads for a package it may treat as
+// installed. It is only ever written when every record describes a whole package.
+const installedStatus = "install ok installed"
 
 // PackageDatabaseOrigin attributes every record to the package database itself
 // rather than to a slice, because a whole package and a slice of it share one
@@ -47,7 +52,10 @@ var PackageDatabaseOrigin = vfs.Origin{Path: "filesystem.packages"}
 // FileLists writes the list of files each package contributed to the image, at
 // the path dpkg looks for it. Without that file every dpkg query warns that the
 // files list is missing, `dpkg -L` prints nothing and `dpkg --verify` cannot tell
-// a complete package from one whose files are gone.
+// a complete package from one whose files are gone. dpkg reads a list only
+// alongside a record it accepts as installed, so a list is inert in a database
+// that omits Status; one is written anyway, because a whole-package image reads
+// it and dropping it would make the two shapes differ by more than the status.
 //
 // The list describes the image as the caller presents it, so a build writes it
 // after hardening: a package's stripped documentation is no longer in the image
@@ -75,7 +83,9 @@ func FileLists(tree *vfs.Tree, packages []PackageState) error {
 }
 
 // PackageState is one package the image contains, described by the control
-// stanza of the verified package it came from.
+// stanza of the verified package it came from. Status says whether every file of
+// it is present or only a slice of it, which decides how the whole database is
+// written.
 type PackageState struct {
 	Name         string
 	Version      string
@@ -88,6 +98,13 @@ type PackageState struct {
 // never runs dpkg or a maintainer script: the records are derived from verified
 // control stanzas, so the image describes itself without a package manager
 // having configured it.
+//
+// A record carries no Status field when the image holds any package only through
+// a slice. dpkg then reads every record as not-installed, which keeps a package
+// manager from seeing a broken package or an upgrade it cannot perform; the
+// tradeoff is that dpkg cannot tell that a package is installed either. An image
+// whose packages are all whole carries a Status field per record instead and
+// reads normally to both dpkg and a package manager.
 //
 // A package that contributed no file is left out. Its record would claim a
 // package the image does not have: a slice whose content is only directories and
@@ -189,7 +206,7 @@ type statusRecord struct {
 	name         string
 	architecture string
 	version      string
-	status       PackageStatus
+	sliced       bool
 	fields       []controlField
 }
 
@@ -212,7 +229,7 @@ func statusRecords(packages []PackageState) ([]statusRecord, error) {
 }
 func statusRecordFor(pkg *PackageState) (statusRecord, error) {
 	switch pkg.Status {
-	case StatusInstalled, StatusUnpacked:
+	case StatusInstalled, StatusSliced:
 	case "":
 		return statusRecord{}, fmt.Errorf("package %q has no status", pkg.Name)
 	default:
@@ -226,9 +243,6 @@ func statusRecordFor(pkg *PackageState) (statusRecord, error) {
 		return statusRecord{}, err
 	}
 	fields = dropStatusFields(fields)
-	if pkg.Status == StatusUnpacked {
-		fields = dropRelations(fields)
-	}
 	if err := checkControlIdentity(pkg, fields); err != nil {
 		return statusRecord{}, err
 	}
@@ -239,7 +253,7 @@ func statusRecordFor(pkg *PackageState) (statusRecord, error) {
 		name:         pkg.Name,
 		architecture: pkg.Architecture,
 		version:      pkg.Version,
-		status:       pkg.Status,
+		sliced:       pkg.Status == StatusSliced,
 		fields:       fields,
 	}, nil
 }
@@ -253,31 +267,6 @@ func requireControlFields(name string, fields []controlField) error {
 		}
 	}
 	return nil
-}
-
-// relationFields are the control fields that declare dependencies between whole
-// packages. A slice ships part of a package, so these relations describe files the
-// image does not have.
-var relationFields = []string{
-	"Depends", "Pre-Depends", "Recommends", "Suggests", "Enhances", "Breaks",
-	"Conflicts", "Provides", "Replaces", "Built-Using",
-}
-
-// dropRelations removes dependency relations from a sliced package's record. A
-// package manager reads a record claiming "install ok unpacked" together with
-// relations it cannot satisfy as a broken database and then refuses every later
-// operation, `apt-get install` included. The slice's real dependency set was
-// resolved at lock time, so nothing is lost: what the image contains is the
-// closure the lock recorded, not the relations of the package it came from.
-func dropRelations(fields []controlField) []controlField {
-	kept := fields[:0]
-	for _, field := range fields {
-		if slices.Contains(relationFields, field.name) {
-			continue
-		}
-		kept = append(kept, field)
-	}
-	return kept
 }
 
 // dropStatusFields removes any Status field from a control stanza. The database's
@@ -309,13 +298,20 @@ func mergeStatusRecords(records []statusRecord) ([]statusRecord, error) {
 			return nil, fmt.Errorf("package %q is recorded at versions %q and %q",
 				record.name, merged[last].version, record.version)
 		}
-		if record.status == StatusInstalled {
-			merged[last].status = StatusInstalled
+		if !record.sliced {
+			merged[last].sliced = false
 		}
 	}
 	return merged, nil
 }
 func encodeStatus(records []statusRecord, existing []statusStanza) []byte {
+	// A record with no Status field reads as not-installed to dpkg, which is what
+	// holds the whole database together: a package manager sees no broken package
+	// to repair and no phantom upgrade, but dpkg cannot know a package is
+	// installed. The two shapes cannot be mixed -- a recorded whole package's
+	// relations would point at packages the database says are not there -- so one
+	// slice anywhere means the whole database omits Status.
+	describe := !slices.ContainsFunc(records, func(record statusRecord) bool { return record.sliced })
 	var buffer strings.Builder
 	for _, record := range records {
 		for _, field := range record.fields {
@@ -323,9 +319,11 @@ func encodeStatus(records []statusRecord, existing []statusStanza) []byte {
 				buffer.WriteString(fieldPackage + ": ")
 				buffer.WriteString(field.value)
 				buffer.WriteString("\n")
-				buffer.WriteString(fieldStatus + ": ")
-				buffer.WriteString(string(record.status))
-				buffer.WriteString("\n")
+				if describe {
+					buffer.WriteString(fieldStatus + ": ")
+					buffer.WriteString(installedStatus)
+					buffer.WriteString("\n")
+				}
 				continue
 			}
 			buffer.WriteString(field.name)

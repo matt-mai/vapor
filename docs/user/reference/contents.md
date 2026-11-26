@@ -95,8 +95,8 @@ vaporize: operation failed: load spec "image.yaml": validate spec: whole-package
 
 A whole package is recorded in `/var/lib/dpkg/status` as `install ok installed` with
 its dependency relations intact, and the image can install further packages if it
-keeps the tooling to do so. This is the difference from a slice, which is recorded as
-`unpacked` without relations. See
+keeps the tooling to do so. A slice is recorded without a status field, which keeps
+package tooling from reading the database as broken. See
 [configure the system](../guides/configure-the-system.md#package-tooling).
 
 ## slices
