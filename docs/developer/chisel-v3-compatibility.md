@@ -105,7 +105,9 @@ check chronological order (`internal/setup/yaml.go:773-884`).
 
 Vapor keeps the metadata and **warns** about EOL or short support instead of failing,
 because a catalogue does not become wrong when a date passes. Clock-derived warnings
-never change lock, image or attestation bytes.
+never change lock, image or attestation bytes. `standard` is the release date and starts
+support; standard support ends at `expanded`, or at `end-of-life` when `expanded` is
+unset.
 
 Every public key has `id` and `armor`, and an archive's `public-keys` list refers to
 them by name. Upstream decodes each key, requires exactly one public-key packet and no
@@ -322,7 +324,7 @@ tested, and a bug when it is accidental. The
 | Schema | v3 only; strict rejection of unknown and duplicate fields, single document, no interpolation. Upstream ignores unknown fields and decodes once. |
 | Trust | Externally configured full fingerprints; compressed index SHA256 **and size before decompression**, archive SHA256 and size before extraction; cached bytes reverified. Upstream verifies decompressed indexes, prefers SHA512, accepts missing package hashes, trusts cache hits and does not enforce these size checks. |
 | Freshness | Enforce configured freshness on new locks, and replay retained evidence offline without today's expiry invalidating an old snapshot. Upstream has no Valid-Until enforcement and no detached-signature fallback path. |
-| Maintenance | End-of-life and short support warn only. The upstream CLI rejects unless explicitly told to ignore. |
+| Maintenance | End-of-life and short support warn only. The upstream CLI rejects an unstable release (before `standard`) and otherwise ignores the dates. |
 | Credentials | Only selected inputs need credentials; upstream opens every archive and skips the ones it cannot authenticate. Secrets never enter outputs. |
 | Acquisition | The lock acquires every verified input; the build never fetches or re-resolves a mutable reference. Upstream fetches during slicing. |
 | Safety | Bound mutation steps, allocations, output, time and filesystem growth before dangerous allocation, or run in a constrained worker. Never execute maintainer scripts. |
