@@ -13,8 +13,9 @@ echo "== python: $(/usr/bin/python3 --version)"
 /tmp/venv/bin/python -c 'import packaging; print("== pip install ok:", packaging.__version__)'
 
 # Vapor never runs maintainer scripts, so dpkg's database is only as good as the files
-# it unpacked. Listing a package it recorded proves the database is readable and holds
-# what the build put there.
+# it unpacked. Reading a record it wrote proves the database parses and holds what the
+# build put there. A record's status field is deliberately absent when the image holds
+# a slice, so this only asks for the name.
 echo "== dpkg database"
 /usr/bin/dpkg --list base-files
 

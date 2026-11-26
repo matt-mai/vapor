@@ -68,10 +68,11 @@ Turn it on for a builder image that installs packages at run time. The list is
 built from the repositories the lock was acquired against, and the keys are the ones
 the lock recorded. A source list a slice already ships is left alone rather than
 duplicated. The package database is written in every image either way: it is what
-lets a scanner attribute what the image contains. A whole package is recorded as
-installed and a sliced package as unpacked, because only its selected files are
-there. The file lists are written after hardening, so they name the files the image
-still has.
+lets a scanner attribute what the image contains. An image of whole packages records
+`install ok installed` for each; one that holds a slice records no status field at
+all, so package tooling does not read the database as broken. A builder image that
+installs packages at run time should therefore be built from whole packages. The file
+lists are written after hardening, so they name the files the image still has.
 
 Only repositories that a locked package or slice came from reach the image. A
 repository the specification configures but nothing is installed from is dropped

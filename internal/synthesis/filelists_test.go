@@ -30,7 +30,7 @@ func TestFileLists_NamesEveryOwnedPath(t *testing.T) {
 	})
 	if err := synthesis.FileLists(tree, []synthesis.PackageState{
 		packageState("openssl", "3.0.13", synthesis.StatusInstalled, baseFilesControl),
-		packageState("base-files", "26.04", synthesis.StatusUnpacked, libc6Control),
+		packageState("base-files", "26.04", synthesis.StatusSliced, libc6Control),
 	}); err != nil {
 		t.Fatalf("FileLists: %v", err)
 	}
@@ -86,7 +86,7 @@ func TestFileLists_IgnoresPackageWithoutFiles(t *testing.T) {
 		t.Fatalf("dir: %v", err)
 	}
 	packages := []synthesis.PackageState{
-		packageState("openssl", "3.0.13", synthesis.StatusUnpacked, "Package: openssl\nVersion: 3.0.13\n"),
+		packageState("openssl", "3.0.13", synthesis.StatusSliced, "Package: openssl\nVersion: 3.0.13\n"),
 	}
 	if err := synthesis.FileLists(tree, packages); err != nil {
 		t.Fatalf("FileLists: %v", err)

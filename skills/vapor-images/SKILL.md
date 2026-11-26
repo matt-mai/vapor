@@ -163,6 +163,28 @@ Always split an application into two images:
 Typical flow: build the app inside the builder image, then place the resulting
 binary in the runtime image via an artifact or declared path.
 
+### Whole packages on a builder, slices on a runtime
+
+The two images record their packages differently, and that decides which
+content each one may use:
+
+- A **runtime image** slices whatever the catalogue offers. Nothing installs onto
+  it, so it only needs the files it runs.
+- A **builder image** selects every package whole, slices included: name `apt`,
+  `dpkg`, `bash`, `ca-certificates` — never `apt/apt-get` and friends.
+
+Vapor writes a `Status:` field per record in `/var/lib/dpkg/status` only when the
+image holds no slice. One slice anywhere turns it off for the whole database,
+which is how a package manager is kept from reporting a phantom upgrade at a
+version already present and then re-unpacking the package. The cost is that apt
+can no longer see anything is installed — `apt-get install` still works, `apt-get
+remove` of a present package does not, which is exactly what a builder needs. A
+database that mixes the two shapes is worse: apt stops every operation with
+`E: Unmet dependencies`. So a builder is all-whole or it is broken; do not add one
+slice to a builder for a single helper file.
+
+Check it on the built image: `dpkg --list <pkg>` must show `ii`, not `un`.
+
 ## Choosing content
 
 Pick per need, not by a fixed ranking. An artifact is often the *best* choice
@@ -170,11 +192,15 @@ even before slices: if you need a version the Ubuntu archive does not carry
 (e.g. a newer Python from Astral's `astral.sh/python-build-standalone`, or Go
 from `go.dev/dl`), take the artifact directly instead of hunting for a package.
 
-1. **Slices** (`contents.slices`) — the default for distro software. Slices are
-   groups of files defined by Canonical's **Chisel** catalogue, which exists for
+1. **Slices** (`contents.slices`) — the default for distro software in a
+   **runtime image**. Slices are groups of files defined by Canonical's
+   **Chisel** catalogue, which exists for
    Ubuntu only; for Debian whole packages are the default and a slice needs a
-   catalogue you write yourself, see `reference/chisel.md`. Browse what exists — these commands read a
-   catalogue already on disk and download nothing:
+   catalogue you write yourself, see `reference/chisel.md`. A **builder image**
+   must not slice: see
+   [Whole packages on a builder](#whole-packages-on-a-builder-slices-on-a-runtime).
+   Browse what exists — these commands read a catalogue already on disk and
+   download nothing:
    ```bash
    git clone --depth 1 --branch ubuntu-26.04 https://github.com/canonical/chisel-releases catalogue
    vaporize slices list --catalogue catalogue [--package NAME]
@@ -307,6 +333,9 @@ Errors name their cause; fix the spec, never weaken validation:
 ## Rules of thumb
 
 - Lock after every change to `image.yaml`; build only from the lock. Builds are offline and fail on missing/corrupt cache data.
+- Narrow a slice or package `version` with an operator (`=`, `!=`, `>`, `>=`, `<`, `<=`,
+  `~>`) when the archive's newest is not what you want: `~> 1.27` stays on 1.27. A bare
+  version is refused.
 - Podman/Docker are only for running images; Vapor needs neither.
 - Slices and catalogues live in `reference/chisel.md`; distro differences in
   `reference/distros.md`; every field in `reference/spec.md`.

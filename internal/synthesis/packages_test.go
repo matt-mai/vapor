@@ -27,6 +27,13 @@ Installed-Size: 13000
 Description: GNU C Library
 `
 
+const opensslControl = `Package: openssl
+Version: 3.0.13
+Architecture: amd64
+Depends: libc6 (>= 2.38)
+Description: Secure Sockets Layer toolkit
+`
+
 func packageState(name, version string, status synthesis.PackageStatus, control string) synthesis.PackageState {
 	return synthesis.PackageState{
 		Name:         name,
@@ -54,16 +61,16 @@ func treeOwning(t *testing.T, names ...string) *vfs.Tree {
 func TestPackageDatabase_WritesEveryPackage(t *testing.T) {
 	tree := treeOwning(t, "base-files", "libc6")
 	packages := []synthesis.PackageState{
-		packageState("base-files", "13ubuntu10.5", synthesis.StatusUnpacked, baseFilesControl),
-		packageState("libc6", "2.39-0ubuntu8.5", synthesis.StatusUnpacked, libc6Control),
+		packageState("base-files", "13ubuntu10.5", synthesis.StatusSliced, baseFilesControl),
+		packageState("libc6", "2.39-0ubuntu8.5", synthesis.StatusSliced, libc6Control),
 	}
 	if err := synthesis.PackageDatabase(tree, packages); err != nil {
 		t.Fatalf("PackageDatabase: %v", err)
 	}
 	content := readFile(t, tree, synthesis.StatusPath)
 	for _, want := range []string{
-		"Package: base-files\nStatus: install ok unpacked\n",
-		"Package: libc6\nStatus: install ok unpacked\n",
+		"Package: base-files\nVersion: 13ubuntu10.5\n",
+		"Package: libc6\nVersion: 2.39-0ubuntu8.5\n",
 		"Installed-Size: 426\n",
 		"Maintainer: Ubuntu Developers <ubuntu-devel-discuss@lists.ubuntu.com>\n",
 		"Priority: required\n",
@@ -71,6 +78,42 @@ func TestPackageDatabase_WritesEveryPackage(t *testing.T) {
 		if !strings.Contains(content, want) {
 			t.Fatalf("status is missing %q:\n%s", want, content)
 		}
+	}
+}
+
+// A record with no Status field reads as not-installed to dpkg, so a package
+// manager sees no broken package to repair and no upgrade it cannot perform. The
+// tradeoff is that dpkg cannot tell that a package is installed either, which is
+// why this only applies once a slice is in the image.
+func TestPackageDatabase_OmitsStatusWhenAnyPackageIsSliced(t *testing.T) {
+	tree := treeOwning(t, "base-files", "openssl")
+	if err := synthesis.PackageDatabase(tree, []synthesis.PackageState{
+		packageState("base-files", "13ubuntu10.5", synthesis.StatusSliced, baseFilesControl),
+		packageState("openssl", "3.0.13", synthesis.StatusInstalled, opensslControl),
+	}); err != nil {
+		t.Fatalf("PackageDatabase: %v", err)
+	}
+	content := readFile(t, tree, synthesis.StatusPath)
+	if strings.Contains(content, "Status:") {
+		t.Fatalf("a database holding a slice wrote a Status field:\n%s", content)
+	}
+	if strings.Count(content, "Package: ") != 2 {
+		t.Fatalf("records were lost:\n%s", content)
+	}
+}
+
+// An image of whole packages only describes itself fully: dpkg and a package
+// manager both read it normally.
+func TestPackageDatabase_DescribesWholePackages(t *testing.T) {
+	tree := treeOwning(t, "openssl")
+	if err := synthesis.PackageDatabase(tree, []synthesis.PackageState{
+		packageState("openssl", "3.0.13", synthesis.StatusInstalled, opensslControl),
+	}); err != nil {
+		t.Fatalf("PackageDatabase: %v", err)
+	}
+	content := readFile(t, tree, synthesis.StatusPath)
+	if !strings.Contains(content, "Package: openssl\nStatus: install ok installed\n") {
+		t.Fatalf("a whole package was not described as installed:\n%s", content)
 	}
 }
 
@@ -99,8 +142,8 @@ func TestPackageDatabase_DropsInputStatusFields(t *testing.T) {
 func TestPackageDatabase_OrdersPackagesByName(t *testing.T) {
 	tree := treeOwning(t, "base-files", "libc6")
 	packages := []synthesis.PackageState{
-		packageState("libc6", "2.39-0ubuntu8.5", synthesis.StatusUnpacked, libc6Control),
-		packageState("base-files", "13ubuntu10.5", synthesis.StatusUnpacked, baseFilesControl),
+		packageState("libc6", "2.39-0ubuntu8.5", synthesis.StatusSliced, libc6Control),
+		packageState("base-files", "13ubuntu10.5", synthesis.StatusSliced, baseFilesControl),
 	}
 	if err := synthesis.PackageDatabase(tree, packages); err != nil {
 		t.Fatalf("PackageDatabase: %v", err)
@@ -114,7 +157,7 @@ func TestPackageDatabase_OrdersPackagesByName(t *testing.T) {
 func TestPackageDatabase_WholePackageWinsOverSlice(t *testing.T) {
 	tree := treeOwning(t, "base-files")
 	packages := []synthesis.PackageState{
-		packageState("base-files", "13ubuntu10.5", synthesis.StatusUnpacked, baseFilesControl),
+		packageState("base-files", "13ubuntu10.5", synthesis.StatusSliced, baseFilesControl),
 		packageState("base-files", "13ubuntu10.5", synthesis.StatusInstalled, baseFilesControl),
 	}
 	if err := synthesis.PackageDatabase(tree, packages); err != nil {
@@ -133,8 +176,8 @@ func TestPackageDatabase_RejectsVersionDisagreement(t *testing.T) {
 	tree := treeOwning(t, "base-files")
 	newer := strings.Replace(baseFilesControl, "13ubuntu10.5", "13ubuntu10.6", 1)
 	packages := []synthesis.PackageState{
-		packageState("base-files", "13ubuntu10.5", synthesis.StatusUnpacked, baseFilesControl),
-		packageState("base-files", "13ubuntu10.6", synthesis.StatusUnpacked, newer),
+		packageState("base-files", "13ubuntu10.5", synthesis.StatusSliced, baseFilesControl),
+		packageState("base-files", "13ubuntu10.6", synthesis.StatusSliced, newer),
 	}
 	err := synthesis.PackageDatabase(tree, packages)
 	if err == nil || !strings.Contains(err.Error(), "recorded at versions") {
@@ -150,15 +193,15 @@ func TestPackageDatabase_RejectsInvalidInput(t *testing.T) {
 	}{
 		{"no status", packageState("base-files", "13ubuntu10.5", "", baseFilesControl), "has no status"},
 		{"unknown status", packageState("base-files", "13ubuntu10.5", "install ok half-configured", baseFilesControl), "has an invalid status"},
-		{"no name", packageState("", "13ubuntu10.5", synthesis.StatusUnpacked, baseFilesControl), "has no name"},
-		{"no control", packageState("base-files", "13ubuntu10.5", synthesis.StatusUnpacked, ""), "has no control stanza"},
-		{"wrong package", packageState("libc6", "2.39-0ubuntu8.5", synthesis.StatusUnpacked, baseFilesControl), "declares Package \"base-files\""},
-		{"wrong version", packageState("base-files", "13ubuntu10.6", synthesis.StatusUnpacked, baseFilesControl), "declares Version"},
-		{"no version field", packageState("base-files", "13ubuntu10.5", synthesis.StatusUnpacked, "Package: base-files\n"), "has no Version field"},
-		{"wrong architecture", synthesis.PackageState{Name: "base-files", Version: "13ubuntu10.5", Architecture: "arm64", Status: synthesis.StatusUnpacked, Control: []byte(baseFilesControl)}, "declares Architecture"},
-		{"malformed", packageState("base-files", "13ubuntu10.5", synthesis.StatusUnpacked, "not a field\n"), "is malformed"},
-		{"duplicate field", packageState("base-files", "13ubuntu10.5", synthesis.StatusUnpacked, "Package: base-files\nPackage: base-files\n"), "is malformed"},
-		{"continuation first", packageState("base-files", "13ubuntu10.5", synthesis.StatusUnpacked, " leading\nPackage: base-files\n"), "is malformed"},
+		{"no name", packageState("", "13ubuntu10.5", synthesis.StatusSliced, baseFilesControl), "has no name"},
+		{"no control", packageState("base-files", "13ubuntu10.5", synthesis.StatusSliced, ""), "has no control stanza"},
+		{"wrong package", packageState("libc6", "2.39-0ubuntu8.5", synthesis.StatusSliced, baseFilesControl), "declares Package \"base-files\""},
+		{"wrong version", packageState("base-files", "13ubuntu10.6", synthesis.StatusSliced, baseFilesControl), "declares Version"},
+		{"no version field", packageState("base-files", "13ubuntu10.5", synthesis.StatusSliced, "Package: base-files\n"), "has no Version field"},
+		{"wrong architecture", synthesis.PackageState{Name: "base-files", Version: "13ubuntu10.5", Architecture: "arm64", Status: synthesis.StatusSliced, Control: []byte(baseFilesControl)}, "declares Architecture"},
+		{"malformed", packageState("base-files", "13ubuntu10.5", synthesis.StatusSliced, "not a field\n"), "is malformed"},
+		{"duplicate field", packageState("base-files", "13ubuntu10.5", synthesis.StatusSliced, "Package: base-files\nPackage: base-files\n"), "is malformed"},
+		{"continuation first", packageState("base-files", "13ubuntu10.5", synthesis.StatusSliced, " leading\nPackage: base-files\n"), "is malformed"},
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -209,7 +252,7 @@ func TestPackageDatabase_ReplacesCoveredRecords(t *testing.T) {
 		t.Fatalf("file: %v", err)
 	}
 	if err := synthesis.PackageDatabase(tree, []synthesis.PackageState{
-		packageState("base-files", "13ubuntu10.5", synthesis.StatusUnpacked, baseFilesControl),
+		packageState("base-files", "13ubuntu10.5", synthesis.StatusSliced, baseFilesControl),
 	}); err != nil {
 		t.Fatalf("PackageDatabase: %v", err)
 	}
@@ -230,7 +273,7 @@ func TestPackageDatabase_FailsOnUnreadableStatus(t *testing.T) {
 		t.Fatalf("Dir: %v", err)
 	}
 	err := synthesis.PackageDatabase(tree, []synthesis.PackageState{
-		packageState("base-files", "13ubuntu10.5", synthesis.StatusUnpacked, baseFilesControl),
+		packageState("base-files", "13ubuntu10.5", synthesis.StatusSliced, baseFilesControl),
 	})
 	if err == nil || !strings.Contains(err.Error(), "cannot be read") {
 		t.Fatalf("error %v does not report the unreadable status file", err)
@@ -239,7 +282,7 @@ func TestPackageDatabase_FailsOnUnreadableStatus(t *testing.T) {
 
 func TestPackageDatabase_IsIdempotent(t *testing.T) {
 	packages := []synthesis.PackageState{
-		packageState("base-files", "13ubuntu10.5", synthesis.StatusUnpacked, baseFilesControl),
+		packageState("base-files", "13ubuntu10.5", synthesis.StatusSliced, baseFilesControl),
 	}
 	tree := treeOwning(t, "base-files")
 	if err := synthesis.PackageDatabase(tree, packages); err != nil {
@@ -256,8 +299,8 @@ func TestPackageDatabase_IsIdempotent(t *testing.T) {
 
 func TestPackageDatabase_IsDeterministic(t *testing.T) {
 	packages := []synthesis.PackageState{
-		packageState("libc6", "2.39-0ubuntu8.5", synthesis.StatusUnpacked, libc6Control),
-		packageState("base-files", "13ubuntu10.5", synthesis.StatusUnpacked, baseFilesControl),
+		packageState("libc6", "2.39-0ubuntu8.5", synthesis.StatusSliced, libc6Control),
+		packageState("base-files", "13ubuntu10.5", synthesis.StatusSliced, baseFilesControl),
 	}
 	var previous string
 	for range 5 {
@@ -276,7 +319,11 @@ func TestPackageDatabase_IsDeterministic(t *testing.T) {
 // A sliced package ships part of its package, so the relations of the whole
 // package describe files that are not in the image. A package manager treats such
 // a record as a broken database and refuses every later operation.
-func TestPackageDatabase_DropsRelationsForSlicedPackages(t *testing.T) {
+// A sliced record keeps its relations, exactly as Canonical's chisel-wrapper
+// writes them. Stripping them would make the record describe a package the archive
+// never published, which is what a package manager reads as a phantom upgrade when
+// it compares the installed record against the archive's own version.
+func TestPackageDatabase_KeepsRelationsForSlicedPackages(t *testing.T) {
 	tree := treeOwning(t, "base-files")
 	control := `Package: base-files
 Version: 13ubuntu10.5
@@ -289,7 +336,7 @@ Section: admin
 Description: Debian base system miscellaneous files
 `
 	packages := []synthesis.PackageState{
-		packageState("base-files", "13ubuntu10.5", synthesis.StatusUnpacked, control),
+		packageState("base-files", "13ubuntu10.5", synthesis.StatusSliced, control),
 	}
 	if err := synthesis.PackageDatabase(tree, packages); err != nil {
 		t.Fatalf("PackageDatabase: %v", err)
@@ -298,16 +345,14 @@ Description: Debian base system miscellaneous files
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, dropped := range []string{"Pre-Depends", "Depends", "Recommends", "awk", "mawk"} {
-		if strings.Contains(string(data), dropped) {
-			t.Fatalf("sliced record retained %q:\n%s", dropped, data)
-		}
-	}
-	for _, kept := range []string{"Status: install ok unpacked", "Section: admin",
-		"Description: Debian base system miscellaneous files"} {
+	for _, kept := range []string{"Pre-Depends: awk", "Recommends: bash-completion",
+		"Section: admin", "Description: Debian base system miscellaneous files"} {
 		if !strings.Contains(string(data), kept) {
 			t.Fatalf("sliced record lost %q:\n%s", kept, data)
 		}
+	}
+	if strings.Contains(string(data), "Status:") {
+		t.Fatalf("sliced record carried a Status field:\n%s", data)
 	}
 }
 

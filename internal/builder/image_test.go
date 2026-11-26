@@ -359,11 +359,17 @@ func TestBuild_WritesThePackageDatabase(t *testing.T) {
 		t.Fatalf("reading the status database: %v", err)
 	}
 	status := string(raw)
-	for _, want := range []string{"Package: base-files\n", "Status: install ok unpacked\n",
-		"Package: openssl\n", "Status: install ok installed\n"} {
+	for _, want := range []string{"Package: base-files\n", "Package: openssl\n",
+		"Version: 26.04\n", "Version: 3.0-1\n"} {
 		if !strings.Contains(status, want) {
 			t.Fatalf("status database is missing %q:\n%s", want, status)
 		}
+	}
+	// The image holds a slice, so no record carries a Status field: a package
+	// manager reads the database as nothing installed rather than as something
+	// broken.
+	if strings.Contains(status, "Status:") {
+		t.Fatalf("a database holding a slice wrote a Status field:\n%s", status)
 	}
 }
 

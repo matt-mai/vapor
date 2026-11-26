@@ -115,6 +115,9 @@ packages:
 - One package cannot be both whole and sliced (`whole-package/slice overlap is not
   allowed`). Two different slices of one package are fine; the same slice twice is
   not (`duplicate slice request`).
+- Slices are for a runtime image. A builder image names whole packages only, because
+  any slice in the image leaves no `Status:` field in the package database and apt
+  then cannot see what is installed; see the builder/runtime section in SKILL.md.
 - A pinned package uses the mapping form; `- openssl: "~> 3.5"` is refused.
 - `version` is a constraint, and needs an operator: `= 3.5.1-1` is one build,
   `= 3.5.1` any build of 3.5.1, `~> 3.5` the 3.x line, `>= 1.4, < 1.5` a window.

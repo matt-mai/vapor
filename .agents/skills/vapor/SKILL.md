@@ -1,5 +1,17 @@
 # Vapor
 
+## Image specs
+
+### Builder images take whole packages
+
+A spec under `images/*/*/*/builder/` selects whole packages only — `apt`, `dpkg`,
+`bash`, `ca-certificates` — never a slice. `internal/synthesis/packages.go` writes a
+`Status:` field per record only when the image holds no slice, so one slice turns it
+off for the whole database; `apt-get install` still works, but apt can no longer see
+what is installed. A mixed database (a real status beside a statusless record) makes
+apt refuse every operation with `E: Unmet dependencies`. Runtime images slice by
+default; builder images never do.
+
 ## Self Improvement
 
 You may add references in a subdir (`references/`).

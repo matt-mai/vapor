@@ -18,7 +18,7 @@ func aptImage(t *testing.T) (*vfs.Tree, []synthesis.PackageState) {
 		t.Fatal(err)
 	}
 	return tree, []synthesis.PackageState{
-		packageState("base-files", "26.04", synthesis.StatusUnpacked, baseFilesControl),
+		packageState("base-files", "26.04", synthesis.StatusSliced, baseFilesControl),
 		packageState("apt", "2.8.3", synthesis.StatusInstalled, aptControl),
 	}
 }

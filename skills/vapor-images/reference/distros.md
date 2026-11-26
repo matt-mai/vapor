@@ -151,9 +151,12 @@ hardening:
 - A builder needs `strip-shells: false` **and** `strip-apt-dpkg: false`, or the
   image has no shell and no apt.
 - `strip-docs: false` is useful on a builder you will inspect.
-- Name whole packages (`apt`, `dpkg`, `bash`) on a builder rather than their
-  slices: a builder wants the full package including config and helpers. Do not
-  mix a whole package and a slice of the same package.
+- Name whole packages (`apt`, `dpkg`, `bash`, `ca-certificates`) on a builder rather
+  than their slices, and use no slice at all there: one slice turns the `Status:`
+  field off for the whole package database, which leaves apt unable to see what is
+  installed. A runtime image is the opposite — slice it. Do not mix a whole package
+  and a slice of the same package anywhere; Vapor refuses that outright
+  (`whole-package/slice overlap is not allowed`).
 - Runtime images have **no shell and no `/bin/sh`**: hardening strips every shell,
   including one a slice added, without an error. The consequence for `#!/bin/sh`
   console scripts is the hardening trap described in SKILL.md — use

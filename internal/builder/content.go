@@ -239,7 +239,7 @@ func (i *Input) sliceSource(ctx context.Context, source sliceReplaySource, sourc
 	control, _ := extracted.Control.Member("control")
 	content.Packages = append(content.Packages, synthesis.PackageState{
 		Name: record.Package, Version: record.Version, Architecture: record.Architecture,
-		Status: synthesis.StatusUnpacked, Control: control,
+		Status: synthesis.StatusSliced, Control: control,
 	})
 	return nil
 }
