@@ -46,6 +46,7 @@ func TestMaintenance_Warnings(t *testing.T) {
 	t.Parallel()
 	maintenance := slices.Maintenance{
 		Standard:  time.Date(2026, time.April, 23, 0, 0, 0, 0, time.UTC),
+		Expanded:  time.Date(2031, time.May, 29, 0, 0, 0, 0, time.UTC),
 		EndOfLife: time.Date(2038, time.April, 27, 0, 0, 0, 0, time.UTC),
 	}
 	cases := []struct {
@@ -53,10 +54,13 @@ func TestMaintenance_Warnings(t *testing.T) {
 		now  time.Time
 		want string
 	}{
-		{"before standard support ends", maintenance.Standard.AddDate(-1, 0, 0), ""},
-		{"on the standard date", maintenance.Standard, ""},
-		{"after standard support ends", maintenance.Standard.AddDate(0, 0, 1), "standard support"},
+		{"before the release date", maintenance.Standard.AddDate(-1, 0, 0), ""},
+		{"on the release date", maintenance.Standard, ""},
+		{"during standard support", maintenance.Expanded.AddDate(-1, 0, 0), ""},
+		{"on the expanded date", maintenance.Expanded, ""},
+		{"after standard support ends", maintenance.Expanded.AddDate(0, 0, 1), "standard support"},
 		{"after end-of-life", maintenance.EndOfLife.AddDate(0, 0, 1), "end-of-life"},
+		{"no expanded date before end-of-life", maintenance.EndOfLife.AddDate(-1, 0, 0), ""},
 		{"dates unset", time.Date(2038, time.April, 27, 0, 0, 0, 0, time.UTC), ""},
 	}
 	for _, testCase := range cases {
@@ -65,6 +69,9 @@ func TestMaintenance_Warnings(t *testing.T) {
 			subject := maintenance
 			if testCase.name == "dates unset" {
 				subject = slices.Maintenance{}
+			}
+			if testCase.name == "no expanded date before end-of-life" {
+				subject.Expanded = time.Time{}
 			}
 			warnings := subject.Warnings(testCase.now)
 			if testCase.want == "" {

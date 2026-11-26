@@ -137,10 +137,9 @@ still locks. Those warnings are deliberately not lock content, image metadata or
 digest input: a warning changing must never change a build.
 
 The same rule covers the catalogue's own support dates. A catalogue past its end-of-life
-— or past standard support when that is the later date — warns during `lock` and locks
-anyway; the dates describe support, not the bytes. `distro/slices.Maintenance.Warnings`
-produces the message and `lockinput` carries it to the command through
-`locking.Evidence.Warnings`.
+— or past the end of standard support, `expanded` — warns during `lock` and locks anyway;
+the dates describe support, not the bytes. `distro/slices.Maintenance.Warnings` produces
+the message and `lockinput` carries it to the command through `locking.Evidence.Warnings`.
 
 ## Selecting a provider
 

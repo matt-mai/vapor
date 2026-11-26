@@ -18,8 +18,8 @@ so you know what to expect.
 - `vaporize lock --check` and `--diff` report drift, and `vaporize outdated` reports
   packages a repository now offers a newer version of without downloading payloads.
 - `vaporize lock` warns, without failing, when the catalogue is past its end-of-life date
-  or past standard support. The warning is not recorded in the lock and does not change
-  the image.
+  or past the end of standard support. The warning is not recorded in the lock and does
+  not change the image.
 - `vaporize build` assembles `linux/amd64` and `linux/arm64` images from cached inputs,
   offline.
 - Slices, whole packages and artifacts, including multi-platform artifacts, archives and

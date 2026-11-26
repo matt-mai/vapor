@@ -77,16 +77,17 @@ func parseMaintenanceDates(raw rawMaintenance) (Maintenance, error) {
 
 // Warnings reports maintenance state that is over by now. A catalogue does not become
 // wrong when a date passes, so this never fails a lock; the dates are metadata about
-// support, not about the bytes. End-of-life is reported instead of the earlier standard
-// date it supersedes.
+// support, not about the bytes. End-of-life is reported instead of the earlier expanded
+// date it supersedes. Standard is the release date, so it starts support; an unset
+// Expanded means standard support runs to end-of-life, which already has its message.
 func (m *Maintenance) Warnings(now time.Time) []string {
 	switch {
 	case past(now, m.EndOfLife):
 		return []string{fmt.Sprintf("catalogue is past its end-of-life date %s",
 			m.EndOfLife.Format(time.DateOnly))}
-	case past(now, m.Standard):
+	case past(now, m.Expanded):
 		return []string{fmt.Sprintf("catalogue is past its standard support date %s",
-			m.Standard.Format(time.DateOnly))}
+			m.Expanded.Format(time.DateOnly))}
 	}
 	return nil
 }
