@@ -313,29 +313,49 @@ func encodeStatus(records []statusRecord, existing []statusStanza) []byte {
 	// slice anywhere means the whole database omits Status.
 	describe := !slices.ContainsFunc(records, func(record statusRecord) bool { return record.sliced })
 	var buffer strings.Builder
-	for _, record := range records {
-		for _, field := range record.fields {
-			if field.name == fieldPackage {
-				buffer.WriteString(fieldPackage + ": ")
-				buffer.WriteString(field.value)
-				buffer.WriteString("\n")
-				if describe {
-					buffer.WriteString(fieldStatus + ": ")
-					buffer.WriteString(installedStatus)
-					buffer.WriteString("\n")
-				}
-				continue
-			}
-			buffer.WriteString(field.name)
-			buffer.WriteString(": ")
-			buffer.WriteString(field.value)
-			buffer.WriteString("\n")
-		}
-		buffer.WriteString("\n")
+	for index := range records {
+		writeRecord(&buffer, &records[index], describe)
 	}
 	for _, stanza := range existing {
-		buffer.WriteString(stanza.text)
+		text := stanza.text
+		if !describe {
+			// A record the image already carried can name a status too, and one
+			// status field anywhere is what mixes the two shapes.
+			text = withoutStatusField(text)
+		}
+		buffer.WriteString(text)
 		buffer.WriteString("\n\n")
 	}
 	return []byte(buffer.String())
+}
+
+// writeRecord appends one record's fields, deriving the Status field beside the
+// package name when the database declares statuses.
+func writeRecord(buffer *strings.Builder, record *statusRecord, describe bool) {
+	for _, field := range record.fields {
+		buffer.WriteString(field.name)
+		buffer.WriteString(": ")
+		buffer.WriteString(field.value)
+		buffer.WriteString("\n")
+		if field.name == fieldPackage && describe {
+			buffer.WriteString(fieldStatus + ": ")
+			buffer.WriteString(installedStatus)
+			buffer.WriteString("\n")
+		}
+	}
+	buffer.WriteString("\n")
+}
+
+// withoutStatusField removes the Status field from a carried-over stanza, leaving
+// its other fields as they were written.
+func withoutStatusField(text string) string {
+	lines := strings.Split(text, "\n")
+	kept := lines[:0]
+	for _, line := range lines {
+		if name, _, ok := strings.Cut(line, ":"); ok && strings.EqualFold(name, fieldStatus) {
+			continue
+		}
+		kept = append(kept, line)
+	}
+	return strings.Join(kept, "\n")
 }
