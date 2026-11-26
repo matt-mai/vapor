@@ -217,13 +217,13 @@ A slice in the image means no record carries a status field. A package manager t
 sees nothing installed: no broken package to repair, and no upgrade it cannot
 perform. That is deliberate, and it is the same tradeoff Canonical's chisel images
 make. A slice contains part of a package, so when package tooling is available it
-would otherwise report an available update at the version already present and then
-re-unpack the whole package, restoring the files the slice left out. What a slice
-needs was decided when you locked, so it is already present.
+would otherwise report an update at the version already present and then re-unpack
+the whole package, bringing back the files the slice left out. What a slice needs was
+decided when you locked, so it is already present.
 
 The cost is that dpkg cannot tell that a package is installed either: `dpkg -l` shows
 the record without a status, `dpkg -L` names no files and `dpkg --verify` checks
-nothing. Scanners are unaffected.
+nothing. Scanners are unaffected, because they read the record itself.
 
 The practical effect:
 
@@ -232,9 +232,9 @@ podman run --rm my-image dpkg -l
 podman run --rm my-image apt-get install -y curl
 ```
 
-`apt-get install` needs the shells and
-package tooling that hardening normally removes, and the package sources it does not
-write by default, so it only works in an image that keeps them:
+`apt-get install` needs the shells and package tooling that hardening normally
+removes, and the package sources it does not write by default, so it only works in an
+image that keeps them:
 
 ```yaml
 hardening:
