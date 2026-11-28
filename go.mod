@@ -5,7 +5,7 @@ go 1.27.4
 require (
 	github.com/ProtonMail/go-crypto v1.5.2
 	github.com/google/go-containerregistry v0.22.1
-	github.com/klauspost/compress v1.20.4
+	github.com/klauspost/compress v1.20.5
 	github.com/spf13/cobra v1.10.2
 	github.com/ulikunitz/xz v0.5.17
 	go.starlark.net v0.0.0-20250417143717-f57e51f710eb
