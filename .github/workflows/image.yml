@@ -1,0 +1,40 @@
+name: image
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to build the image from
+        required: true
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  # The release job pins the tag to a commit that went through CI, so this one only
+  # has to build the binary, put it in an image and push that image under the tag.
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Install vaporize
+        run: |
+          go build -o "$HOME/.local/bin/vaporize" ./cmd/vaporize
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - uses: docker/login-action@5e57cd118135c5cefea8cdfb9117b73b1b0e0a94 # v3.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push the image
+        env:
+          version: ${{ inputs.tag || github.ref_name }}
+        run: images/vapor/build.sh --version "$version" --tags "${version#v},latest" --push

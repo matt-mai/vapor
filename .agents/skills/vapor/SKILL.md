@@ -1,3 +1,8 @@
+---
+name: vapor
+description: Vapor repo conventions and non-obvious quirks beyond AGENTS.md. Use whenever working in this repo.
+---
+
 # Vapor
 
 ## Image specs

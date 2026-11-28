@@ -35,6 +35,9 @@ go.work.sum
 plan.md
 todo.md
 
+# Images this repository publishes, built from their specs
+images/*/.work/
+
 # vapor generated files
 cache/
 !internal/cache/

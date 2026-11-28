@@ -1,0 +1,84 @@
+# The image Vapor's own CI jobs run in: the vaporize binary plus the tools a job
+# needs — a shell, git, curl and the archive utilities. No package manager and no
+# interpreter, so it stays a build step rather than a general purpose image.
+#
+# images/vapor/build.sh stamps the binary's hash, the version and the tags, then
+# locks and pushes. The placeholders below are never committed filled in, because
+# the hash of a release binary is only known once it is built.
+version: 1
+name: vapor
+image: ghcr.io/matt-mai/vapor
+tags: [@tags@]
+distro: ubuntu
+release: "26.04"
+platforms: [linux/amd64]
+contents:
+  catalogues:
+    - name: ubuntu
+      url: https://github.com/canonical/chisel-releases
+      branch: ubuntu-26.04
+  slices:
+    # A CI job runs commands in this image, so it needs the tools a job uses: a
+    # shell, git to clone the repository, and the archive utilities CI scripts call.
+    - package: dash
+      slice: bins
+    - package: coreutils
+      slice: bins
+    - package: bash
+      slice: bins
+    - package: git
+      slice: bins
+    - package: git
+      slice: http-support
+    - package: curl
+      slice: bins
+    - package: tar
+      slice: bins
+    - package: gzip
+      slice: bins
+    - package: xz-utils
+      slice: bins
+    # The data slice carries the public roots, and its mutation script is what
+    # concatenates them into one bundle: the package builds that bundle with a
+    # maintainer script Vapor never runs.
+    - package: ca-certificates
+      slice: data
+  artifacts:
+    - name: vaporize
+      dest: /usr/local/bin/vaporize
+      unpack: false
+      mode: "0755"
+      sources:
+        - platforms: [linux/amd64]
+          path: files/vaporize
+          sha256: "@vaporize@"
+      sbom:
+        name: vapor
+        version: "@version@"
+filesystem:
+  paths:
+    - path: /work
+      type: directory
+      mode: "0755"
+    # vaporize spools a layer to a temporary file, so the image needs one it may write.
+    - path: /tmp
+      type: directory
+      mode: "01777"
+    # No slice carries git's hook templates, and a missing directory makes every clone
+    # print a warning a CI log does not need.
+    - path: /usr/share/git-core/templates
+      type: directory
+      mode: "0755"
+hardening:
+  # The default is to strip shells; this image is a CI step, not a runtime.
+  strip-shells: false
+container:
+  # Root, because a CI runner mounts its workspace root-owned and a job runs shell
+  # commands in it. Prefer `--user` if you only want to run vaporize on your own
+  # files; see README.md.
+  user: "0:0"
+  entrypoint: [/usr/local/bin/vaporize]
+  workdir: /work
+  # One place for the cache, next to the spec that fills it, so a mount keeps it.
+  env:
+    VAPOR_CACHE_DIR: /work/cache
